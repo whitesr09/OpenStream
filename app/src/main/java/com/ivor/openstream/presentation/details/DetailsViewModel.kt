@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ivor.openstream.data.remote.model.AnimeDetailsDto
+import com.ivor.openstream.data.remote.TmdbApi
+import com.ivor.openstream.data.remote.model.WatchProviderDto
 import com.ivor.openstream.data.local.entity.WatchLaterEntity
 import com.ivor.openstream.data.remote.model.SeasonDetailsDto
 import com.ivor.openstream.data.remote.model.EpisodeDto
@@ -41,6 +43,7 @@ class DetailsViewModel @Inject constructor(
     private val downloadRepository: DownloadRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val listRepository: CustomListRepository,
+    private val tmdbApi: TmdbApi,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -80,6 +83,35 @@ class DetailsViewModel @Inject constructor(
             repository.getMediaDetails(animeId, mediaType)
                 .onSuccess { details ->
                     _uiState.value = DetailsUiState.Success(details)
+                    // Watch availability is supplemental: provider failure must never block details.
+                    viewModelScope.launch {
+                        val country = java.util.Locale.getDefault().country.ifBlank { "US" }
+                        runCatching {
+                            if (mediaType == "movie") tmdbApi.getMovieWatchProviders(animeId)
+                            else tmdbApi.getTvWatchProviders(animeId)
+                        }.onSuccess { response ->
+                            val region = response.results[country] ?: response.results["US"]
+                            val providers = linkedMapOf<Int, WatchProviderUi>()
+                            fun add(items: List<WatchProviderDto>, mode: String) {
+                                items.forEach { provider ->
+                                    providers.putIfAbsent(provider.providerId, WatchProviderUi(provider.providerId, provider.providerName, provider.logoPath, mode))
+                                }
+                            }
+                            region?.let {
+                                add(it.flatrate, "Included")
+                                add(it.free, "Free")
+                                add(it.ads, "With ads")
+                                add(it.rent, "Rent")
+                                add(it.buy, "Buy")
+                            }
+                            (_uiState.value as? DetailsUiState.Success)?.let { current ->
+                                _uiState.value = current.copy(
+                                    watchProviders = providers.values.sortedBy { it.providerName.lowercase() },
+                                    watchProvidersLink = region?.link
+                                )
+                            }
+                        }
+                    }
                     // Add to watch history
                     viewModelScope.launch {
                         repository.addToWatchHistory(details.toAnimeDto(mediaType))
@@ -309,6 +341,13 @@ class DetailsViewModel @Inject constructor(
     }
 }
 
+data class WatchProviderUi(
+    val id: Int,
+    val name: String,
+    val logoPath: String?,
+    val availability: String
+)
+
 private const val DEFAULT_RUNTIME_MIN = 24
 
 private fun isReleased(airDate: String?): Boolean {
@@ -351,7 +390,9 @@ sealed interface DetailsUiState {
     data class Success(
         val details: AnimeDetailsDto,
         val selectedSeasonDetails: SeasonDetailsDto? = null,
-        val isLoadingEpisodes: Boolean = false
+        val isLoadingEpisodes: Boolean = false,
+        val watchProviders: List<WatchProviderUi> = emptyList(),
+        val watchProvidersLink: String? = null
     ) : DetailsUiState
     data class Error(val message: String) : DetailsUiState
 }
