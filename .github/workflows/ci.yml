@@ -37,3 +37,10 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: OpenStream-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
