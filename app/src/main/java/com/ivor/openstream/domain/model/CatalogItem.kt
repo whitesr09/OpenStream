@@ -10,6 +10,9 @@ data class CatalogItem(
     val backdropUrl: String? = null,
     val description: String? = null,
     val language: String? = null,
+    val rating: Double? = null,
+    val popularity: Double? = null,
+    val genres: Set<Int> = emptySet(),
     val externalIds: Map<String, String> = emptyMap(),
     val isAgeRestricted: Boolean = false
 )
