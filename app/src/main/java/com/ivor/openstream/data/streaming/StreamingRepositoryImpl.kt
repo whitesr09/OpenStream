@@ -98,8 +98,11 @@ class StreamingRepositoryImpl @Inject constructor(
             )
             val completed = completedIndex + 1
             val firstStageComplete = completed == firstStageProviders.size
-            val shouldTryFallback = firstStageComplete &&
-                servers.isEmpty() &&
+            // Coverage mode: direct sources are resolved first, but fallback sources are still
+        // queried afterwards even when a direct source returned something. This prevents the
+        // first successful provider from hiding titles/qualities/languages that another source
+        // can provide.
+        val shouldTryFallback = firstStageComplete &&
                 deferredFallbackProviders.isNotEmpty()
             send(
                 ServerResolution(
@@ -113,7 +116,7 @@ class StreamingRepositoryImpl @Inject constructor(
             )
         }
 
-        if (servers.isEmpty() && deferredFallbackProviders.isNotEmpty()) {
+        if (deferredFallbackProviders.isNotEmpty()) {
             deferredFallbackProviders.forEach { provider ->
                 launch(Dispatchers.IO) {
                     val result = runCatching {
