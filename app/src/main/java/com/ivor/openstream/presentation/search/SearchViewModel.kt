@@ -233,7 +233,19 @@ class SearchViewModel @Inject constructor(
                 SearchFilter.SERIES -> "tv"
                 else -> "all"
             }
-            repository.searchAnime(state.query.trim(), target, type, state.sort.apiValue)
+            runCatching {
+                val primary = repository.searchAnime(state.query.trim(), target, type, state.sort.apiValue).getOrThrow()
+                if (primary.isNotEmpty()) {
+                    primary
+                } else {
+                    repository.searchCatalogFallback(
+                        query = state.query.trim(),
+                        page = target,
+                        mediaType = type,
+                        language = state.filters.language
+                    ).getOrThrow()
+                }
+            }
         }
         if (target == 1) autoLoadedPages = 0
         result.fold(
