@@ -49,7 +49,9 @@ data class AppSettings(
     val downloadMaxHeight: Int = 1080,
     /** Picture-in-picture buttons left and right of play/pause (Android shows three at most). */
     val pipLeftAction: PipAction = PipAction.REWIND,
-    val pipRightAction: PipAction = PipAction.FORWARD
+    val pipRightAction: PipAction = PipAction.FORWARD,
+    /** Provider IDs disabled by the user. An empty set means every bundled provider is enabled. */
+    val disabledCatalogProviders: Set<String> = emptySet()
 ) {
     companion object {
         val SEEK_STEPS = listOf(5, 10, 15, 30)
@@ -95,6 +97,7 @@ class AppSettingsStore @Inject constructor(
             .putInt(KEY_DOWNLOAD_HEIGHT, updated.downloadMaxHeight)
             .putString(KEY_PIP_LEFT, updated.pipLeftAction.name)
             .putString(KEY_PIP_RIGHT, updated.pipRightAction.name)
+            .putStringSet(KEY_DISABLED_CATALOG_PROVIDERS, updated.disabledCatalogProviders)
             .apply()
     }
 
@@ -113,7 +116,8 @@ class AppSettingsStore @Inject constructor(
             downloadMaxHeight = prefs.getInt(KEY_DOWNLOAD_HEIGHT, defaults.downloadMaxHeight)
                 .takeIf { it in AppSettings.DOWNLOAD_HEIGHTS } ?: defaults.downloadMaxHeight,
             pipLeftAction = enumOrDefault(prefs.getString(KEY_PIP_LEFT, null), defaults.pipLeftAction),
-            pipRightAction = enumOrDefault(prefs.getString(KEY_PIP_RIGHT, null), defaults.pipRightAction)
+            pipRightAction = enumOrDefault(prefs.getString(KEY_PIP_RIGHT, null), defaults.pipRightAction),
+            disabledCatalogProviders = prefs.getStringSet(KEY_DISABLED_CATALOG_PROVIDERS, emptySet()).orEmpty()
         )
     }
 
@@ -132,6 +136,7 @@ class AppSettingsStore @Inject constructor(
         const val KEY_ACTIVE_PROFILE = "app_active_profile_id"
         const val KEY_PIP_LEFT = "app_pip_left_action"
         const val KEY_PIP_RIGHT = "app_pip_right_action"
+        const val KEY_DISABLED_CATALOG_PROVIDERS = "app_disabled_catalog_providers"
         /** Matches ProfileEntity.DEFAULT_ID, the profile the Room migration seeds. */
         const val DEFAULT_PROFILE_ID = 1L
     }
