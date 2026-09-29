@@ -12,6 +12,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import com.ivor.openstream.domain.model.AnimeCatalog
 import com.ivor.openstream.domain.model.BrowseGenre
+import com.ivor.openstream.domain.model.CatalogContentType
+import com.ivor.openstream.domain.model.CatalogQuery
 import kotlinx.coroutines.awaitAll
 import javax.inject.Inject
 
