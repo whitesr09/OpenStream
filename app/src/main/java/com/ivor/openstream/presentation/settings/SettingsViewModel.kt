@@ -19,6 +19,7 @@ import com.ivor.openstream.data.settings.PipAction
 import com.ivor.openstream.data.settings.ThemeMode
 import com.ivor.openstream.di.downloadRequirements
 import com.ivor.openstream.domain.repository.ExtensionRepository
+import com.ivor.openstream.domain.repository.CatalogProvider
 import com.ivor.openstream.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -50,6 +51,7 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val extensionRepository: ExtensionRepository,
+    private val catalogProviders: Set<@JvmSuppressWildcards CatalogProvider>,
     private val appSettingsStore: AppSettingsStore,
     private val downloadManager: DownloadManager,
     private val watchProgressRepository: WatchProgressRepository,
@@ -72,6 +74,14 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     val appSettings: StateFlow<AppSettings> = appSettingsStore.settings
+
+    val catalogProviderState: StateFlow<List<CatalogProviderUi>> = appSettingsStore.settings
+        .map { settings ->
+            catalogProviders.sortedBy { it.priority }.map { provider ->
+                CatalogProviderUi(provider.id, provider.displayName, provider.priority, provider.id !in settings.disabledCatalogProviders)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val hiddenTitleCount: StateFlow<Int> = hiddenTitlesRepository.count
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -155,6 +165,11 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(mode: ThemeMode) = appSettingsStore.update { it.copy(themeMode = mode) }
 
     fun setDynamicColor(enabled: Boolean) = appSettingsStore.update { it.copy(dynamicColor = enabled) }
+
+    fun setCatalogProviderEnabled(id: String, enabled: Boolean) = appSettingsStore.update { settings ->
+        val disabled = settings.disabledCatalogProviders.toMutableSet().apply { if (enabled) remove(id) else add(id) }
+        settings.copy(disabledCatalogProviders = disabled)
+    }
 
     fun setDnsProvider(provider: DnsProvider) = appSettingsStore.update { it.copy(dnsProvider = provider) }
 
