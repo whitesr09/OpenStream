@@ -19,7 +19,9 @@ class AnimeRepositoryImpl @Inject constructor(
     private val api: TmdbApi,
     private val sharedPreferences: SharedPreferences,
     private val json: Json,
-    private val kids: KidsContentFilter
+    private val kids: KidsContentFilter,
+    private val catalogSearch: CatalogSearchRepository,
+    private val identityResolver: MediaIdentityResolver
 ) : AnimeRepository {
 
     private val HISTORY_KEY = "watch_history_list"
@@ -157,6 +159,33 @@ class AnimeRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun searchCatalogFallback(query: String, page: Int, mediaType: String, language: String?): Result<List<AnimeDto>> = runCatching {
+        val types = when (mediaType) {
+            "movie" -> setOf(CatalogContentType.MOVIE)
+            "tv" -> setOf(CatalogContentType.SERIES, CatalogContentType.ANIME)
+            else -> emptySet()
+        }
+        val items = catalogSearch.search(CatalogQuery(text = query.trim(), page = page, types = types, language = language)).getOrThrow()
+        items.mapNotNull { item ->
+            val identity = identityResolver.resolve(item).getOrNull() ?: return@mapNotNull null
+            AnimeDto(
+                id = identity.tmdbId,
+                tvName = if (identity.tmdbType == "tv") identity.title else null,
+                movieTitle = if (identity.tmdbType == "movie") identity.title else null,
+                overview = item.description,
+                posterPath = item.posterUrl,
+                backdropPath = item.backdropUrl,
+                firstAirDate = if (identity.tmdbType == "tv") item.year?.toString() else null,
+                releaseDate = if (identity.tmdbType == "movie") item.year?.toString() else null,
+                voteAverage = item.rating,
+                genreIds = item.genres.toList(),
+                mediaType = identity.tmdbType,
+                originalLanguage = item.language,
+                popularity = item.popularity,
+                adult = item.isAgeRestricted
+            )
+        }.distinctBy { "${it.mediaType}:${it.id}" }
+    }
     override suspend fun getAnimeDetails(id: Int): Result<AnimeDetailsDto> = runCatching {
         api.getAnimeDetails(id = id)
     }
