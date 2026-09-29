@@ -62,7 +62,42 @@ data class ExtensionEngineDto(
     val language: String? = null,
     val qualityFilter: String? = null,
     val movieUrl: String? = null,
-    val tvUrl: String? = null
+    val tvUrl: String? = null,
+    val resolver: ResolverApiDto? = null
+)
+
+@Serializable
+data class ResolverApiRequestDto(
+    val method: String = "GET",
+    val url: String = "",
+    val query: Map<String, String> = emptyMap(),
+    val headers: Map<String, String> = emptyMap(),
+    val body: String? = null
+)
+
+@Serializable
+data class ResolverApiResponseDto(
+    val searchItemsPath: String = "",
+    val providerIdPath: String = "id",
+    val titlePath: String? = "title",
+    val yearPath: String? = "year",
+    val streamsPath: String = "",
+    val streamUrlPath: String = "url",
+    val qualityPath: String? = "quality",
+    val audioPath: String? = "audio",
+    val languagePath: String? = "language",
+    val mimeTypePath: String? = "mimeType",
+    val subtitlesPath: String? = "subtitles",
+    val subtitleUrlPath: String = "url",
+    val subtitleLabelPath: String? = "label"
+)
+
+@Serializable
+data class ResolverApiDto(
+    val search: ResolverApiRequestDto? = null,
+    val details: ResolverApiRequestDto? = null,
+    val playback: ResolverApiRequestDto,
+    val response: ResolverApiResponseDto = ResolverApiResponseDto()
 )
 
 /** Cached snapshot of one repository, persisted verbatim so the catalog survives being offline. */

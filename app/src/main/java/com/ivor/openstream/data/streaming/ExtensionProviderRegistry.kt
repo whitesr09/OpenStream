@@ -10,6 +10,7 @@ import com.ivor.openstream.data.streaming.anime.AnimeSiteSpec
 import com.ivor.openstream.data.streaming.anime.CloudflareClearance
 import com.ivor.openstream.data.streaming.anime.MegaplayExtractor
 import com.ivor.openstream.data.streaming.anime.ReAnimeProvider
+import com.ivor.openstream.data.streaming.providers.ResolverApiProvider
 import com.ivor.openstream.data.streaming.providers.VidkingDirectApi
 import com.ivor.openstream.data.streaming.providers.VidkingDirectProvider
 import com.ivor.openstream.data.streaming.providers.VidkingServerSpec
@@ -109,6 +110,15 @@ class ExtensionProviderRegistry @Inject constructor(
                     priority = engine.priority,
                     isFallback = manifest.isFallback
                 )
+            )
+            ExtensionEngineType.RESOLVER_API -> ResolverApiProvider(
+                client = streamingClient,
+                json = json,
+                spec = engine.resolver ?: return null,
+                baseUrl = engine.endpoint,
+                id = manifest.id,
+                displayName = manifest.name,
+                priority = engine.priority
             )
             ExtensionEngineType.ANIKOTO -> AnikotoProvider(
                 spec = animeSiteSpec(manifest),

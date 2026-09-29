@@ -3,6 +3,9 @@ package com.ivor.openstream.data.extensions
 import com.ivor.openstream.domain.model.ExtensionEngine
 import com.ivor.openstream.domain.model.ExtensionEngineType
 import com.ivor.openstream.domain.model.ExtensionManifest
+import com.ivor.openstream.domain.model.ResolverApiRequest
+import com.ivor.openstream.domain.model.ResolverApiResponse
+import com.ivor.openstream.domain.model.ResolverApiSpec
 import com.ivor.openstream.domain.model.ExtensionStatus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -86,12 +89,42 @@ class ExtensionIndexParser @Inject constructor() {
                 language = entry.engine.language?.trim()?.takeIf { it.isNotEmpty() },
                 qualityFilter = entry.engine.qualityFilter?.trim()?.takeIf { it.isNotEmpty() },
                 movieUrl = entry.engine.movieUrl?.trim()?.takeIf { it.isNotEmpty() },
-                tvUrl = entry.engine.tvUrl?.trim()?.takeIf { it.isNotEmpty() }
+                tvUrl = entry.engine.tvUrl?.trim()?.takeIf { it.isNotEmpty() },
+                resolver = entry.engine.resolver?.let { resolver ->
+                    ResolverApiSpec(
+                        search = resolver.search?.toDomain(),
+                        details = resolver.details?.toDomain(),
+                        playback = resolver.playback.toDomain(),
+                        response = ResolverApiResponse(
+                            searchItemsPath = resolver.response.searchItemsPath,
+                            providerIdPath = resolver.response.providerIdPath,
+                            titlePath = resolver.response.titlePath,
+                            yearPath = resolver.response.yearPath,
+                            streamsPath = resolver.response.streamsPath,
+                            streamUrlPath = resolver.response.streamUrlPath,
+                            qualityPath = resolver.response.qualityPath,
+                            audioPath = resolver.response.audioPath,
+                            languagePath = resolver.response.languagePath,
+                            mimeTypePath = resolver.response.mimeTypePath,
+                            subtitlesPath = resolver.response.subtitlesPath,
+                            subtitleUrlPath = resolver.response.subtitleUrlPath,
+                            subtitleLabelPath = resolver.response.subtitleLabelPath
+                        )
+                    )
+                }
             ),
             isFallback = entry.fallback || engineType == ExtensionEngineType.VIDKING_WEBVIEW,
             installedByDefault = entry.installedByDefault
         )
     }
+
+    private fun ResolverApiRequestDto.toDomain() = ResolverApiRequest(
+        method = method.trim().uppercase().ifBlank { "GET" },
+        url = url.trim(),
+        query = query.filterKeys { it.isNotBlank() },
+        headers = headers.filterKeys { it.isNotBlank() },
+        body = body
+    )
 
     /** Accepts `2026-08-01`, a full ISO instant, or epoch millis. Returns 0 when unknown. */
     fun parseTimestamp(raw: String?): Long {

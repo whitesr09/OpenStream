@@ -97,6 +97,92 @@ falls back to `main/extensions/index.json`.
 | `vidking-direct` | `VidkingDirectProvider` | `endpoint`; optional `language`, `qualityFilter`, `priority` |
 | `vidking-webview` | `WebEmbedResolver` with the built-in Vidking page (slow compatibility resolver) | none |
 | `web-embed` | `WebEmbedResolver` (hidden WebView that records the player's media requests) | `movieUrl` and/or `tvUrl` (https templates using `{tmdbId}`, `{imdbId}`, `{season}`, `{episode}`); optional `priority` |
+| `resolver-api` | `ResolverApiProvider` (declarative HTTP lookup → optional details → playback resolver) | `endpoint` (HTTPS base URL) and `engine.resolver.playback`; optional `search` / `details` stages and JSON response paths |
+
+#### Resolver API engine
+
+`resolver-api` is the new engine for providers whose architecture is closer to a resolver service than a
+single embed page. It is intentionally generic: the APK implements the HTTP/runtime once, while a
+repository entry supplies endpoint paths and JSON field mappings.
+
+The resolution pipeline is:
+
+```
+MediaIdentity
+   ↓
+optional search (title / ids / year)
+   ↓
+providerId
+   ↓
+optional details(providerId)
+   ↓
+playback(providerId + season + episode)
+   ↓
+streams + subtitles
+```
+
+A resolver manifest can use relative paths against `engine.endpoint` or absolute HTTPS URLs:
+
+```json
+{
+  "engine": {
+    "type": "resolver-api",
+    "endpoint": "https://api.example.com",
+    "priority": 15,
+    "resolver": {
+      "search": {
+        "method": "GET",
+        "url": "/search",
+        "query": {
+          "q": "{title}",
+          "year": "{year}"
+        }
+      },
+      "details": {
+        "method": "GET",
+        "url": "/title/{providerId}"
+      },
+      "playback": {
+        "method": "GET",
+        "url": "/play/{providerId}",
+        "query": {
+          "season": "{season}",
+          "episode": "{episode}"
+        }
+      },
+      "response": {
+        "searchItemsPath": "results",
+        "providerIdPath": "id",
+        "titlePath": "title",
+        "yearPath": "year",
+        "streamsPath": "streams",
+        "streamUrlPath": "url",
+        "qualityPath": "quality",
+        "languagePath": "language",
+        "audioPath": "audio",
+        "mimeTypePath": "mimeType",
+        "subtitlesPath": "subtitles",
+        "subtitleUrlPath": "url",
+        "subtitleLabelPath": "label"
+      }
+    }
+  }
+}
+```
+
+Supported placeholders are `{tmdbId}`, `{imdbId}`, `{title}`, `{originalTitle}`, `{year}`,
+`{season}`, `{episode}`, `{providerId}`, and `{details}`.
+
+The resolver supports JSON arrays/objects, simple dotted paths and array indexes such as
+`results[0].id`. Search results are ranked locally by title similarity and year distance before
+the provider id is used for playback.
+
+Only public/authorized HTTPS resolver services should be published. The engine does not implement
+provider-specific credential extraction, encrypted payload cracking, JavaScript execution, or
+anti-bot bypasses. If a provider requires one of those, it needs a separately reviewed native
+adapter rather than putting those mechanisms into a repository JSON file.
+
+
 | `anikoto` | `AnikotoProvider` (site search, MAL-id check, megaplay embeds via `MegaplayExtractor`) | `endpoint`: the site origin (`https://…`) |
 | `reanime` | `ReAnimeProvider` (megaplay by AniList id; the site is the Referer) | `endpoint`: the site origin |
 | `animepahe` | `AnimePaheProvider` (Cloudflare cleared in a hidden WebView by `CloudflareClearance`, kwik packed-script unpacking) | `endpoint`: the site origin |

@@ -161,4 +161,79 @@ class ExtensionIndexParserTest {
         )
         assertNull(manifest)
     }
+
+    @Test
+    fun `maps resolver api engine with multi stage requests and response paths`() {
+        val entry = parser.parseExtensionList(
+            """
+            [{
+              "id": "resolver-demo",
+              "name": "Resolver Demo",
+              "versionCode": 2,
+              "engine": {
+                "type": "resolver-api",
+                "endpoint": "https://api.example.com",
+                "priority": 12,
+                "resolver": {
+                  "search": {
+                    "method": "GET",
+                    "url": "/search",
+                    "query": { "q": "{title}", "year": "{year}" }
+                  },
+                  "details": {
+                    "method": "GET",
+                    "url": "/title/{providerId}"
+                  },
+                  "playback": {
+                    "method": "GET",
+                    "url": "/play/{providerId}",
+                    "query": { "season": "{season}", "episode": "{episode}" }
+                  },
+                  "response": {
+                    "searchItemsPath": "results",
+                    "providerIdPath": "id",
+                    "titlePath": "title",
+                    "yearPath": "year",
+                    "streamsPath": "streams",
+                    "streamUrlPath": "url",
+                    "qualityPath": "quality",
+                    "languagePath": "language",
+                    "subtitlesPath": "subtitles"
+                  }
+                }
+              }
+            }]
+            """.trimIndent()
+        ).single()
+
+        val manifest = requireNotNull(parser.toManifest(entry, repoId = "custom"))
+        assertEquals(ExtensionEngineType.RESOLVER_API, manifest.engine.type)
+        assertTrue(manifest.isSupported)
+        assertEquals("https://api.example.com", manifest.engine.endpoint)
+        assertEquals("/search", manifest.engine.resolver?.search?.url)
+        assertEquals("{providerId}", manifest.engine.resolver?.details?.url?.substringAfterLast("/"))
+        assertEquals("/play/{providerId}", manifest.engine.resolver?.playback?.url)
+        assertEquals("streams", manifest.engine.resolver?.response?.streamsPath)
+    }
+
+    @Test
+    fun `resolver api without playback configuration cannot run`() {
+        val entry = parser.parseExtensionList(
+            """[
+              {
+                "id": "broken-resolver",
+                "name": "Broken",
+                "engine": {
+                  "type": "resolver-api",
+                  "endpoint": "https://api.example.com"
+                }
+              }
+            ]"""
+        ).single()
+
+        val manifest = requireNotNull(parser.toManifest(entry, repoId = "custom"))
+        assertEquals(ExtensionEngineType.RESOLVER_API, manifest.engine.type)
+        assertFalse(manifest.isSupported)
+    }
+
 }

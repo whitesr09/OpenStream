@@ -28,6 +28,8 @@ enum class ExtensionEngineType(val key: String) {
     VIDKING_WEBVIEW("vidking-webview"),
     /** Any embeddable web player, described by URL templates. */
     WEB_EMBED("web-embed"),
+    /** Declarative HTTP resolver: lookup a provider id, then resolve playback resources. */
+    RESOLVER_API("resolver-api"),
     /** Anime sites; `endpoint` is the site's origin. Titles are matched through AniList. */
     ANIKOTO("anikoto"),
     REANIME("reanime"),
@@ -50,7 +52,9 @@ data class ExtensionEngine(
     val qualityFilter: String? = null,
     /** `web-embed` only: player URL templates, see `WebEmbedSpec`. */
     val movieUrl: String? = null,
-    val tvUrl: String? = null
+    val tvUrl: String? = null,
+    /** Optional multi-stage HTTP resolver configuration. */
+    val resolver: ResolverApiSpec? = null
 ) {
     val isRunnable: Boolean
         get() = when (type) {
@@ -58,6 +62,8 @@ data class ExtensionEngine(
             ExtensionEngineType.VIDKING_WEBVIEW -> true
             ExtensionEngineType.WEB_EMBED ->
                 listOfNotNull(movieUrl, tvUrl).any { it.startsWith("https://") }
+            ExtensionEngineType.RESOLVER_API ->
+                endpoint.startsWith("https://") && resolver?.isRunnable == true
             ExtensionEngineType.ANIKOTO,
             ExtensionEngineType.REANIME,
             ExtensionEngineType.ANIMEPAHE,
@@ -69,6 +75,49 @@ data class ExtensionEngine(
     companion object {
         const val DEFAULT_PRIORITY = 50
     }
+}
+
+/**
+ * Declarative HTTP resolver configuration.
+ *
+ * The app owns the HTTP/runtime behavior; an extension only describes public/authorized
+ * endpoints and JSON fields. URLs and bodies support {tmdbId}, {imdbId}, {title}, {year},
+ * {season}, {episode} and {providerId}.
+ */
+data class ResolverApiRequest(
+    val method: String = "GET",
+    val url: String = "",
+    val query: Map<String, String> = emptyMap(),
+    val headers: Map<String, String> = emptyMap(),
+    val body: String? = null
+)
+
+data class ResolverApiResponse(
+    val searchItemsPath: String = "",
+    val providerIdPath: String = "id",
+    val titlePath: String? = "title",
+    val yearPath: String? = "year",
+    val streamsPath: String = "",
+    val streamUrlPath: String = "url",
+    val qualityPath: String? = "quality",
+    val audioPath: String? = "audio",
+    val languagePath: String? = "language",
+    val mimeTypePath: String? = "mimeType",
+    val subtitlesPath: String? = "subtitles",
+    val subtitleUrlPath: String = "url",
+    val subtitleLabelPath: String? = "label"
+)
+
+data class ResolverApiSpec(
+    val search: ResolverApiRequest? = null,
+    val details: ResolverApiRequest? = null,
+    val playback: ResolverApiRequest,
+    val response: ResolverApiResponse = ResolverApiResponse()
+) {
+    val isRunnable: Boolean
+        get() = playback.url.isNotBlank() &&
+            (search == null || search.url.isNotBlank()) &&
+            (details == null || details.url.isNotBlank())
 }
 
 /** A single catalog entry as published by a repository. */
