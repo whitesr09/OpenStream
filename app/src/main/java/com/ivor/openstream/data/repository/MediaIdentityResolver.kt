@@ -19,25 +19,21 @@ class MediaIdentityResolver @Inject constructor(
     suspend fun resolve(item: CatalogItem): Result<MediaIdentity?> = runCatching {
         val explicitTmdb = item.externalIds["tmdb"]?.toIntOrNull()
         if (explicitTmdb != null) {
-            val type = if (item.type == CatalogContentType.MOVIE) "movie" else "tv"
-            val ids = api.getExternalIds(type, explicitTmdb)
-            return@runCatching MediaIdentity(
-                tmdbId = explicitTmdb,
-                tmdbType = type,
-                imdbId = ids.imdbId,
-                title = item.title,
-                originalTitle = item.originalTitle,
-                year = item.year
-            )
+            return@runCatching buildIdentity(item, explicitTmdb, item.type.toTmdbType())
         }
+
+        val externalIdentity = resolveExternalId(item)
+        if (externalIdentity != null) return@runCatching externalIdentity
 
         val response = api.searchMulti(item.title, 1)
         val candidates = response.results
             .filter { it.mediaType == "movie" || it.mediaType == "tv" }
             .map { candidate ->
                 val candidateType = if (candidate.mediaType == "movie") CatalogContentType.MOVIE else CatalogContentType.SERIES
-                val typeScore = if (item.type == CatalogContentType.MOVIE && candidateType == CatalogContentType.MOVIE ||
-                    item.type != CatalogContentType.MOVIE && candidateType == CatalogContentType.SERIES) 100 else 0
+                val typeScore = if (
+                    item.type == CatalogContentType.MOVIE && candidateType == CatalogContentType.MOVIE ||
+                    item.type != CatalogContentType.MOVIE && candidateType == CatalogContentType.SERIES
+                ) 100 else 0
                 val title = candidate.name.trim().lowercase()
                 val query = item.title.trim().lowercase()
                 val titleScore = when {
@@ -61,19 +57,45 @@ class MediaIdentityResolver @Inject constructor(
         val best = candidates.firstOrNull() ?: return@runCatching null
         if (best.second < MIN_MATCH_SCORE) return@runCatching null
 
-        val candidate = best.first
-        val type = if (candidate.mediaType == "movie") "movie" else "tv"
-        val ids = api.getExternalIds(type, candidate.id)
+        buildIdentity(item, best.first.id, if (best.first.mediaType == "movie") "movie" else "tv", best.third)
+    }
 
-        MediaIdentity(
-            tmdbId = candidate.id,
-            tmdbType = type,
-            imdbId = ids.imdbId,
-            title = candidate.name,
+    private suspend fun resolveExternalId(item: CatalogItem): MediaIdentity? {
+        val candidates = listOf(
+            item.externalIds["imdb"]?.let { it to "imdb_id" },
+            item.externalIds["tvdb"]?.let { it to "tvdb_id" }
+        )
+        for ((externalId, externalSource) in candidates.filterNotNull()) {
+            val lookup = api.findByExternalId(externalId, externalSource)
+            val expectedType = item.type.toTmdbType()
+            val candidate = when (expectedType) {
+                "movie" -> lookup.movieResults.firstOrNull()
+                else -> lookup.tvResults.firstOrNull()
+            } ?: continue
+            return buildIdentity(item, candidate.id, expectedType, candidate.date.take(4).toIntOrNull())
+        }
+        return null
+    }
+
+    private suspend fun buildIdentity(
+        item: CatalogItem,
+        tmdbId: Int,
+        tmdbType: String,
+        resolvedYear: Int? = item.year
+    ): MediaIdentity {
+        val ids = api.getExternalIds(tmdbType, tmdbId)
+        return MediaIdentity(
+            tmdbId = tmdbId,
+            tmdbType = tmdbType,
+            imdbId = ids.imdbId ?: item.externalIds["imdb"],
+            title = item.title,
             originalTitle = item.originalTitle,
-            year = best.third
+            year = resolvedYear
         )
     }
+
+    private fun CatalogContentType.toTmdbType(): String =
+        if (this == CatalogContentType.MOVIE) "movie" else "tv"
 
     private companion object {
         const val MIN_MATCH_SCORE = 100
