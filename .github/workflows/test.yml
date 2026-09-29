@@ -32,8 +32,15 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
+      - name: Verify TMDB key is configured
+        env:
+        TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: test -n "$TMDB_API_KEY"
+
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        env:
+        TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+       run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
