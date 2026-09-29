@@ -28,8 +28,7 @@ class TmdbCatalogProvider @Inject constructor(private val api: TmdbApi) : Catalo
             CatalogItem(
                 sourceId = "tmdb:" + item.mediaType + ":" + item.id,
                 title = item.name,
-                originalTitle = item.originalName.takeIf { it.isNotBlank() },
-                type = type,
+                                type = type,
                 year = item.date.take(4).toIntOrNull(),
                 posterUrl = item.posterPath,
                 backdropUrl = item.backdropPath,
