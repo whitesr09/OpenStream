@@ -203,6 +203,26 @@ fun SettingsScreen(
                 }
             }
 
+            item(key = "catalog-sources") {
+                val providers = viewModel.catalogProviderState.collectAsState().value
+                SettingsGroup(
+                    title = "Catalog sources",
+                    footer = "Search metadata from multiple catalogs. Disabling a source removes it from new searches; playback extensions are managed separately."
+                ) {
+                    providers.forEachIndexed { index, provider ->
+                        SwitchRow(
+                            index = index,
+                            count = providers.size,
+                            icon = Icons.Default.Public,
+                            title = provider.name,
+                            supporting = if (provider.enabled) "Enabled · priority " + provider.priority else "Disabled",
+                            checked = provider.enabled,
+                            onCheckedChange = { viewModel.setCatalogProviderEnabled(provider.id, it) }
+                        )
+                    }
+                }
+            }
+
             item(key = "appearance") {
                 val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                 val count = if (dynamicAvailable) 2 else 1

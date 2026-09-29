@@ -3,6 +3,8 @@ package com.ivor.openstream.di
 import com.ivor.openstream.BuildConfig
 import com.ivor.openstream.data.remote.TmdbApi
 import com.ivor.openstream.data.remote.GithubApi
+import com.ivor.openstream.data.remote.JikanApi
+import com.ivor.openstream.data.remote.TvMazeApi
 import com.ivor.openstream.data.settings.AppDns
 import dagger.Module
 import dagger.Provides
@@ -98,6 +100,35 @@ object NetworkModule {
     fun provideTmdbApi(@Named("Tmdb") retrofit: Retrofit): TmdbApi {
         return retrofit.create(TmdbApi::class.java)
     }
+
+
+    @Provides
+    @Singleton
+    @Named("Jikan")
+    fun provideJikanRetrofit(@Named("StreamingClient") client: OkHttpClient, json: Json): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.jikan.moe/v4/")
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideJikanApi(@Named("Jikan") retrofit: Retrofit): JikanApi = retrofit.create(JikanApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("TvMaze")
+    fun provideTvMazeRetrofit(@Named("StreamingClient") client: OkHttpClient, json: Json): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.tvmaze.com/")
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideTvMazeApi(@Named("TvMaze") retrofit: Retrofit): TvMazeApi = retrofit.create(TvMazeApi::class.java)
 
     @Provides
     @Singleton
