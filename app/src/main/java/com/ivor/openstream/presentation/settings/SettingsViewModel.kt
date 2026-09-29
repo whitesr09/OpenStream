@@ -37,6 +37,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+data class CatalogProviderUi(
+    val id: String,
+    val name: String,
+    val priority: Int,
+    val enabled: Boolean
+)
+
 data class SettingsUiState(
     val installedCount: Int = 0,
     val enabledCount: Int = 0,
