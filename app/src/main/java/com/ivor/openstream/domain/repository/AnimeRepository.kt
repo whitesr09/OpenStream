@@ -12,14 +12,7 @@ interface AnimeRepository {
     suspend fun getTopRatedAnime(page: Int = 1): Result<List<AnimeDto>>
     suspend fun getAiringTodayAnime(page: Int = 1): Result<List<AnimeDto>>
 
-    /** One of Home's curated, anime-only lists. */
-    /**
-     * One of Home's curated lists. Lists are cached for a few hours so Home opens instantly and
-     * stays stable; [forceRefresh] fetches a fresh copy (pull to refresh).
-     */
     suspend fun getCatalog(catalog: AnimeCatalog, forceRefresh: Boolean = false): Result<List<AnimeDto>>
-
-    /** Popular movies and series in a genre, interleaved by popularity. */
     suspend fun discoverByGenre(genre: BrowseGenre, page: Int): Result<List<AnimeDto>>
 
     suspend fun searchAnime(
@@ -28,11 +21,20 @@ interface AnimeRepository {
         mediaType: String = "all",
         sortBy: String = "popularity.desc"
     ): Result<List<AnimeDto>>
+
+    /** Provider-agnostic fallback for titles not returned by the normal TMDB search path. */
+    suspend fun searchCatalogFallback(
+        query: String,
+        page: Int,
+        mediaType: String = "all",
+        language: String? = null
+    ): Result<List<AnimeDto>>
+
     suspend fun getAnimeDetails(id: Int): Result<AnimeDetailsDto>
     suspend fun getMovieDetails(id: Int): Result<AnimeDetailsDto>
     suspend fun getMediaDetails(id: Int, mediaType: String): Result<AnimeDetailsDto>
     suspend fun getSeasonDetails(animeId: Int, seasonNumber: Int): Result<SeasonDetailsDto>
-    
+
     // Watch History
     suspend fun addToWatchHistory(anime: AnimeDto)
     suspend fun getWatchHistory(): List<AnimeDto>

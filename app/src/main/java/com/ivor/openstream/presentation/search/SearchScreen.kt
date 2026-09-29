@@ -646,7 +646,7 @@ private fun TopResultCard(item: AnimeDto, onClick: () -> Unit) {
     ) {
         Box {
             AsyncImage(
-                model = "https://image.tmdb.org/t/p/w780${item.backdropPath}",
+                model = item.backdropPath?.let { if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w780$it" },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -695,7 +695,7 @@ private fun ResultCard(item: AnimeDto, onClick: () -> Unit) {
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
         ) {
             AsyncImage(
-                model = item.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" },
+                model = item.posterPath?.let { if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w342$it" },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

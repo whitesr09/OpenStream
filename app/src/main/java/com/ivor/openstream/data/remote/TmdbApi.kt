@@ -6,6 +6,7 @@ import com.ivor.openstream.data.remote.model.SeasonDetailsDto
 import com.ivor.openstream.data.remote.model.TmdbResponse
 import com.ivor.openstream.data.remote.model.KeywordDto
 import com.ivor.openstream.data.remote.model.ExternalIdsDto
+import com.ivor.openstream.data.remote.model.ExternalMediaLookupDto
 import com.ivor.openstream.data.remote.model.PersonDto
 import com.ivor.openstream.data.remote.model.ContentRatingsDto
 import com.ivor.openstream.data.remote.model.ReleaseDatesDto
@@ -28,6 +29,13 @@ interface TmdbApi {
         @Path("media_type") mediaType: String,
         @Path("id") id: Int
     ): ExternalIdsDto
+
+    /** Resolve a public external ID (for example IMDb) to TMDB media. */
+    @GET("find/{external_id}")
+    suspend fun findByExternalId(
+        @Path("external_id") externalId: String,
+        @Query("external_source") externalSource: String
+    ): ExternalMediaLookupDto
 
     @GET("discover/movie")
     suspend fun discoverMovie(
@@ -65,13 +73,14 @@ interface TmdbApi {
         @Query("query") query: String,
         @Query("page") page: Int = 1
     ): TmdbResponse<KeywordDto>
+
     @GET("discover/tv")
     suspend fun getPopularAnime(
         @Query("page") page: Int = 1,
         @Query("sort_by") sortBy: String = "popularity.desc",
-        @Query("with_genres") genres: String = "16", // Animation
-        @Query("with_original_language") language: String = "ja", // Anime usually
-        @Query("with_keywords") keywords: String = "210024|287501" // Optionally specify anime-specific keywords
+        @Query("with_genres") genres: String = "16",
+        @Query("with_original_language") language: String = "ja",
+        @Query("with_keywords") keywords: String = "210024|287501"
     ): TmdbResponse<AnimeDto>
 
     @GET("trending/tv/{time_window}")
