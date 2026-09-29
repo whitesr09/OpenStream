@@ -10,6 +10,7 @@ import com.ivor.openstream.data.remote.model.ExternalMediaLookupDto
 import com.ivor.openstream.data.remote.model.PersonDto
 import com.ivor.openstream.data.remote.model.ContentRatingsDto
 import com.ivor.openstream.data.remote.model.ReleaseDatesDto
+import com.ivor.openstream.data.remote.model.WatchProviderResponseDto
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -23,6 +24,12 @@ interface TmdbApi {
     /** Per-country TV ratings (US "TV-Y7", "TV-MA"...) for a show. */
     @GET("tv/{id}/content_ratings")
     suspend fun getTvContentRatings(@Path("id") id: Int): ContentRatingsDto
+
+    @GET("movie/{id}/watch/providers")
+    suspend fun getMovieWatchProviders(@Path("id") id: Int): WatchProviderResponseDto
+
+    @GET("tv/{id}/watch/providers")
+    suspend fun getTvWatchProviders(@Path("id") id: Int): WatchProviderResponseDto
 
     @GET("{media_type}/{id}/external_ids")
     suspend fun getExternalIds(
