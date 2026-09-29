@@ -189,6 +189,7 @@ fun DetailsScreen(
             is DetailsUiState.Success -> {
                 val details = state.details
                 val isMovie = mediaType == "movie"
+                val uriHandler = LocalUriHandler.current
                 val activeDownloads = episodeDownloads.values.count { DownloadStatus.isActive(it.status) }
                 val trailers = details.videos?.results.orEmpty()
                     .filter { it.site == "YouTube" && (it.type == "Trailer" || it.type == "Teaser") }
@@ -317,6 +318,16 @@ fun DetailsScreen(
                     }
                 }
                 val extraItems: LazyListScope.() -> Unit = {
+                    if (state.watchProviders.isNotEmpty()) {
+                        item(key = "where-to-watch") {
+                            SectionTitle("Where to watch")
+                            WatchProvidersRail(
+                                providers = state.watchProviders,
+                                onOpen = { state.watchProvidersLink?.let { uriHandler.openUri(it) } }
+                            )
+                        }
+                    }
+
                     if (details.cast.isNotEmpty()) {
                         item(key = "cast") {
                             SectionTitle("Cast")
@@ -434,6 +445,35 @@ fun DetailsScreen(
     }
 }
 
+@Composable
+private fun WatchProvidersRail(
+    providers: List<WatchProviderUi>,
+    onOpen: () -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(vertical = 4.dp)
+    ) {
+        items(providers, key = { it.id }) { provider ->
+            Surface(
+                modifier = Modifier.width(132.dp).clickable(onClick = onOpen),
+                shape = ExpressiveShapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AsyncImage(
+                        model = provider.logoPath?.let { "https://image.tmdb.org/t/p/w92$it" },
+                        contentDescription = provider.name,
+                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Text(text = provider.name, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(text = provider.availability, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
 // region Top bar & hero
 
 @Composable
