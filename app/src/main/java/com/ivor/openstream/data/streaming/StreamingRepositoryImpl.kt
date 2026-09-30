@@ -37,9 +37,12 @@ class StreamingRepositoryImpl @Inject constructor(
         val enrichedIdentity = idMappingService.enrich(identity)
         val installedProviders = withContext(Dispatchers.IO) { providerRegistry.activeProviders() }
         val providerPriorities = installedProviders.associate { it.id to it.priority }
-        val enabledProviders = installedProviders.sortedWith(compareBy<ExtensionStreamProvider> { provider ->
-            if (provider.id == preferredServerProviderId) 0 else 1
-        }.thenBy { it.priority }).filter {
+        val preferredServerId = preferences.getString(preferenceKey(identity), null)
+        val preferredServerProviderId = preferredServerId?.substringBefore(":")
+        val enabledProviders = installedProviders.sortedWith(
+            compareBy<ExtensionStreamProvider> { if (it.id == preferredServerProviderId) 0 else 1 }
+                .thenBy { it.priority }
+        ).filter {
             it.isEnabled && (consecutiveFailures[it.id] ?: 0) < CIRCUIT_BREAKER_THRESHOLD
         }
         val directProviders = if (includeFallbacks) {
@@ -54,8 +57,6 @@ class StreamingRepositoryImpl @Inject constructor(
         }
         val firstStageProviders = directProviders.ifEmpty { fallbackProviders }
         val deferredFallbackProviders = fallbackProviders.takeIf { directProviders.isNotEmpty() }.orEmpty()
-        val preferredServerId = preferences.getString(preferenceKey(identity), null)
-        val preferredServerProviderId = preferredServerId?.substringBefore(":")
         send(ServerResolution(totalProviders = firstStageProviders.size))
         if (firstStageProviders.isEmpty()) {
             send(ServerResolution(isComplete = true))
