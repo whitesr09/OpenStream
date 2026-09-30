@@ -2,6 +2,7 @@ package com.ivor.openstream.data.repository
 
 import android.content.SharedPreferences
 import com.ivor.openstream.data.remote.TmdbApi
+import com.ivor.openstream.data.settings.AppSettingsStore
 import com.ivor.openstream.data.remote.model.AnimeDetailsDto
 import com.ivor.openstream.data.remote.model.AnimeDto
 import com.ivor.openstream.data.remote.model.SeasonDetailsDto
@@ -23,7 +24,8 @@ class AnimeRepositoryImpl @Inject constructor(
     private val json: Json,
     private val kids: KidsContentFilter,
     private val catalogSearch: CatalogSearchRepository,
-    private val identityResolver: MediaIdentityResolver
+    private val identityResolver: MediaIdentityResolver,
+    private val appSettingsStore: AppSettingsStore
 ) : AnimeRepository {
 
     private val HISTORY_KEY = "watch_history_list"
@@ -65,13 +67,14 @@ class AnimeRepositoryImpl @Inject constructor(
     }.getOrNull()
 
     private fun catalogKey(catalog: AnimeCatalog) =
-        if (kids.isActive) "catalog_cache_kids_${catalog.name}" else "catalog_cache_${catalog.name}"
+        if (kids.isActive) "catalog_cache_kids_${catalog.name}_${appSettingsStore.current.showAdultContent}"
+        else "catalog_cache_${catalog.name}_${appSettingsStore.current.showAdultContent}"
 
     private suspend fun fetchCatalog(catalog: AnimeCatalog): Result<List<AnimeDto>> = runCatching {
         val anime = mapOf(
             "with_genres" to "$ANIMATION_GENRE",
             "with_original_language" to "ja",
-            "include_adult" to "false"
+            "include_adult" to appSettingsStore.current.showAdultContent.toString()
         )
         val movieKids = kids.movieDiscoverParams()
         val tvKids = kids.tvDiscoverParams()
@@ -141,8 +144,8 @@ class AnimeRepositoryImpl @Inject constructor(
 
         val (tvShows, movies) = coroutineScope {
             when (mediaType) {
-                "tv" -> api.searchTv(query.trim(), page).results to emptyList()
-                "movie" -> emptyList<AnimeDto>() to api.searchMovie(query.trim(), page).results
+                "tv" -> api.searchTv(query.trim(), page, appSettingsStore.current.showAdultContent).results to emptyList()
+                "movie" -> emptyList<AnimeDto>() to api.searchMovie(query.trim(), page, appSettingsStore.current.showAdultContent).results
                 else -> {
                     val tvRequest = async { api.searchTv(query.trim(), page).results }
                     val movieRequest = async { api.searchMovie(query.trim(), page).results }
@@ -167,7 +170,7 @@ class AnimeRepositoryImpl @Inject constructor(
             "tv" -> setOf(CatalogContentType.SERIES, CatalogContentType.ANIME)
             else -> emptySet()
         }
-        val items = catalogSearch.search(CatalogQuery(text = query.trim(), page = page, types = types, language = language)).getOrThrow()
+        val items = catalogSearch.search(CatalogQuery(text = query.trim(), page = page, types = types, language = language, includeAgeRestricted = appSettingsStore.current.showAdultContent)).getOrThrow()
         items.mapNotNull { item ->
             val identity = identityResolver.resolve(item).getOrNull() ?: return@mapNotNull null
             AnimeDto(
