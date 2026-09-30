@@ -51,7 +51,9 @@ data class AppSettings(
     val pipLeftAction: PipAction = PipAction.REWIND,
     val pipRightAction: PipAction = PipAction.FORWARD,
     /** Provider IDs disabled by the user. An empty set means every bundled provider is enabled. */
-    val disabledCatalogProviders: Set<String> = emptySet()
+    val disabledCatalogProviders: Set<String> = emptySet(),
+    /** Show adult-rated/erotic catalog metadata in normal browsing and search. */
+    val showAdultContent: Boolean = false
 ) {
     companion object {
         val SEEK_STEPS = listOf(5, 10, 15, 30)
@@ -97,7 +99,8 @@ class AppSettingsStore @Inject constructor(
             .putInt(KEY_DOWNLOAD_HEIGHT, updated.downloadMaxHeight)
             .putString(KEY_PIP_LEFT, updated.pipLeftAction.name)
             .putString(KEY_PIP_RIGHT, updated.pipRightAction.name)
-            .putStringSet(KEY_DISABLED_CATALOG_PROVIDERS, updated.disabledCatalogProviders)
+             .putStringSet(KEY_DISABLED_CATALOG_PROVIDERS, updated.disabledCatalogProviders)
+            .putBoolean(KEY_SHOW_ADULT_CONTENT, updated.showAdultContent)
             .apply()
     }
 
@@ -117,7 +120,8 @@ class AppSettingsStore @Inject constructor(
                 .takeIf { it in AppSettings.DOWNLOAD_HEIGHTS } ?: defaults.downloadMaxHeight,
             pipLeftAction = enumOrDefault(prefs.getString(KEY_PIP_LEFT, null), defaults.pipLeftAction),
             pipRightAction = enumOrDefault(prefs.getString(KEY_PIP_RIGHT, null), defaults.pipRightAction),
-            disabledCatalogProviders = prefs.getStringSet(KEY_DISABLED_CATALOG_PROVIDERS, emptySet()).orEmpty()
+            disabledCatalogProviders = prefs.getStringSet(KEY_DISABLED_CATALOG_PROVIDERS, emptySet()).orEmpty(),
+            showAdultContent = prefs.getBoolean(KEY_SHOW_ADULT_CONTENT, defaults.showAdultContent)
         )
     }
 
@@ -137,6 +141,7 @@ class AppSettingsStore @Inject constructor(
         const val KEY_PIP_LEFT = "app_pip_left_action"
         const val KEY_PIP_RIGHT = "app_pip_right_action"
         const val KEY_DISABLED_CATALOG_PROVIDERS = "app_disabled_catalog_providers"
+        const val KEY_SHOW_ADULT_CONTENT = "app_show_adult_content"
         /** Matches ProfileEntity.DEFAULT_ID, the profile the Room migration seeds. */
         const val DEFAULT_PROFILE_ID = 1L
     }
