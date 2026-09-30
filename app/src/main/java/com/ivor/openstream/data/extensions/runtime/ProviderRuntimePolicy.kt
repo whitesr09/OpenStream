@@ -19,7 +19,7 @@ object ProviderRuntimePolicy {
         if (host.startsWith("169.254.")) return false
         if (host.startsWith("172.")) {
             val second = host.split('.').getOrNull(1)?.toIntOrNull()
-            if (second in 16..31) return false
+            if (second != null && second in 16..31) return false
         }
         return true
     }
