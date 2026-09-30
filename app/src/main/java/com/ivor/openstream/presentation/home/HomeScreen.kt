@@ -128,7 +128,6 @@ fun HomeScreen(
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    // Clears the floating toolbar and the mini player.
                     contentPadding = PaddingValues(bottom = 200.dp)
                 ) {
                     item(key = "hero") {
@@ -173,15 +172,12 @@ fun HomeScreen(
 
         SnackbarHost(
             hostState = snackbarHostState,
-            // Above the floating toolbar and the mini player.
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 180.dp)
         )
     }
 }
-
-// region Hero
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -208,7 +204,6 @@ private fun HeroSection(
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.weight(1f)
             )
-            // A kids profile keeps Settings and updates out of reach; leaving takes a hold on the avatar.
             if (profile?.isKids != true) {
                 IconButton(onClick = onUpdateClick) {
                     Icon(Icons.Default.SystemUpdate, contentDescription = "Check for updates")
@@ -222,7 +217,6 @@ private fun HeroSection(
 
         if (items.isNotEmpty()) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                // Wide screens (tablets, landscape) get landscape artwork at a calmer height.
                 val wide = maxWidth >= 600.dp
                 HorizontalCenteredHeroCarousel(
                     state = rememberCarouselState { items.size },
@@ -244,7 +238,6 @@ private fun HeroSection(
     }
 }
 
-/** 0 for a sliver at the carousel's edge, 1 for the focused card; used to fade text in. */
 @OptIn(ExperimentalMaterial3Api::class)
 private val CarouselItemScope.focus: Float
     get() {
@@ -272,9 +265,9 @@ private fun CarouselItemScope.HeroCard(
     ) {
         AsyncImage(
             model = if (wide && anime.backdropPath != null) {
-                "https://image.tmdb.org/t/p/w1280${anime.backdropPath}"
+                "https://image.tmdb.org/t/p/w780${anime.backdropPath}"
             } else {
-                "https://image.tmdb.org/t/p/w780${anime.posterPath}"
+                "https://image.tmdb.org/t/p/w500${anime.posterPath}"
             },
             contentDescription = anime.name,
             contentScale = ContentScale.Crop,
@@ -290,7 +283,6 @@ private fun CarouselItemScope.HeroCard(
                     )
                 )
         )
-        // Text only belongs on the focused card; the side cards are slivers of artwork.
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -353,10 +345,6 @@ private fun MetaLine(anime: AnimeDto) {
         )
     }
 }
-
-// endregion
-
-// region Rails
 
 @Composable
 private fun RankedRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onHide: (AnimeDto) -> Unit) {
@@ -452,9 +440,8 @@ private fun PosterRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onHide
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        itemsIndexed(items, key = { _, anime -> anime.id }) { _, anime ->
+        itemsIndexed(items, key = { _, anime -> if (anime.isMovie) "movie:${anime.id}" else "tv:${anime.id}" }) { _, anime ->
             var menuOpen by remember { mutableStateOf(false) }
-            // Only the artwork is rounded; clipping the whole card would cut into the title below it.
             Column(
                 modifier = Modifier
                     .width(132.dp)
@@ -484,7 +471,6 @@ private fun PosterRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onHide
     }
 }
 
-/** Tap opens the title; long-press opens its menu. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Modifier.titleClickable(anime: AnimeDto, onOpen: (AnimeDto) -> Unit, onLongPress: () -> Unit): Modifier {
@@ -514,8 +500,6 @@ private fun NotInterestedMenu(expanded: Boolean, onDismiss: () -> Unit, onHide: 
     }
 }
 
-// endregion
-
 @Composable
 fun SectionHeader(title: String, topPadding: Dp = 28.dp) {
     Text(
@@ -541,77 +525,12 @@ private fun HomeError(onRetry: () -> Unit) {
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
+        Spacer(Modifier.height(12.dp))
         Text(
             text = "Check your connection and try again.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onRetry, shape = ExpressiveShapes.medium) {
-            Text("Try again")
-        }
-    }
-}
-
-/** TMDB genre ids that anime titles use (the TV and movie lists share most of them). */
-private val GENRE_NAMES = mapOf(
-    16 to "Animation",
-    10759 to "Action & Adventure",
-    28 to "Action",
-    12 to "Adventure",
-    35 to "Comedy",
-    18 to "Drama",
-    10765 to "Sci-Fi & Fantasy",
-    14 to "Fantasy",
-    878 to "Sci-Fi",
-    9648 to "Mystery",
-    10749 to "Romance",
-    80 to "Crime",
-    27 to "Horror",
-    53 to "Thriller",
-    10751 to "Family",
-    10762 to "Kids",
-    36 to "History",
-    10402 to "Music"
-)
-
-/** Mirrors the Home layout (title, hero, two shelves) so nothing jumps when content arrives. */
-@Composable
-private fun HomeSkeleton() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-    ) {
-        SkeletonBox(
-            modifier = Modifier
-                .padding(start = 24.dp, top = 16.dp, bottom = 20.dp)
-                .size(width = 180.dp, height = 32.dp),
-            shape = ExpressiveShapes.small
-        )
-        SkeletonBox(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxWidth()
-                .height(420.dp),
-            shape = ExpressiveShapes.extraLarge
-        )
-        repeat(2) {
-            SkeletonBox(
-                modifier = Modifier
-                    .padding(start = 24.dp, top = 28.dp, bottom = 14.dp)
-                    .size(width = 200.dp, height = 24.dp),
-                shape = ExpressiveShapes.small
-            )
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                repeat(4) {
-                    SkeletonBox(modifier = Modifier.size(width = 132.dp, height = 194.dp))
-                }
-            }
-        }
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = onRetry, shape = ExpressiveShapes.medium) { Text("Retry") }
     }
 }
