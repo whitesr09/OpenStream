@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.map
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -63,6 +64,8 @@ private const val KEY_PREFERRED_AUDIO = "preferred_audio_language"
 private const val KEY_PREFERRED_SUBTITLE = "preferred_subtitle_language"
 private const val MAX_AUTOMATIC_FAILOVERS = 3
 private const val STREAM_REFRESH_AGE_MS = 6 * 60 * 60 * 1_000L
+private const val BUFFER_STALL_TIMEOUT_MS = 8_000L
+private const val BUFFER_FAILOVER_COOLDOWN_MS = 3_000L
 
 /** The episode playback continues with, possibly the first episode of the next season. */
 data class NextEpisodeTarget(
@@ -167,7 +170,6 @@ class PlayerViewModel @Inject constructor(
 
     /** A stream still playing from the mini player that this screen should continue, not reload. */
     private var adoptedServer: VideoServer? = null
-
 
     private val _captionSettings = MutableStateFlow(loadCaptionSettings())
     val captionSettings: StateFlow<CaptionStyleSettings> = _captionSettings.asStateFlow()
@@ -355,6 +357,43 @@ class PlayerViewModel @Inject constructor(
 
     // Declared after every state flow it reads, so they are initialised when this runs.
     init {
+        // Media3 can remain in STATE_BUFFERING without ever emitting a playback error when a
+        // provider returns a dead CDN, a stale signed URL, or a stream that accepts HTTP but never
+        // produces media. Treat prolonged startup buffering as a source failure so the existing
+        // failover path can move to the next provider automatically.
+        viewModelScope.launch {
+            var stalledServerId: String? = null
+            var stalledSince = 0L
+            var lastFailoverAt = 0L
+            while (true) {
+                delay(1_000L)
+                val server = _activeServer.value
+                if (server == null || _mediaUri.value?.second != null ||
+                    player.playbackState != Player.STATE_BUFFERING || player.isPlaying
+                ) {
+                    stalledServerId = null
+                    stalledSince = 0L
+                    continue
+                }
+
+                val now = System.currentTimeMillis()
+                if (stalledServerId != server.id) {
+                    stalledServerId = server.id
+                    stalledSince = now
+                    continue
+                }
+
+                if (now - stalledSince >= BUFFER_STALL_TIMEOUT_MS &&
+                    now - lastFailoverAt >= BUFFER_FAILOVER_COOLDOWN_MS
+                ) {
+                    lastFailoverAt = now
+                    stalledServerId = null
+                    stalledSince = 0L
+                    onPlaybackError()
+                }
+            }
+        }
+
         viewModelScope.launch {
             combine(_mediaDetails, _currentEpisode, _nextEpisode, _activeServer, _mediaUri) { details, episode, next, server, media ->
                 if (details == null || media == null) return@combine null
