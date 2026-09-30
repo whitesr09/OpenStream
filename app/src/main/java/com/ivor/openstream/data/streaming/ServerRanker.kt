@@ -11,7 +11,9 @@ internal object ServerRanker {
     ): List<VideoServer> {
         val merged = linkedMapOf<String, VideoServer>()
         (existing + incoming).forEach { candidate ->
-            val key = candidate.url.substringBefore('#')
+            // The same URL can require different request headers. Keep those as distinct
+            // stream candidates while collapsing exact URL/header duplicates.
+            val key = deduplicationKey(candidate)
             val current = merged[key]
             if (current == null || compare(candidate, current, providerPriorities) < 0) {
                 merged[key] = candidate
@@ -25,6 +27,15 @@ internal object ServerRanker {
                 else -> compare(left, right, providerPriorities)
             }
         }
+    }
+
+    private fun deduplicationKey(server: VideoServer): String {
+        val normalizedUrl = server.url.substringBefore('#')
+        val normalizedHeaders = server.headers
+            .entries
+            .sortedBy { it.key.lowercase() }
+            .joinToString("&") { (name, value) -> "${name.lowercase()}=$value" }
+        return "$normalizedUrl\u0000$normalizedHeaders"
     }
 
     private fun compare(
