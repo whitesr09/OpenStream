@@ -6,6 +6,7 @@ import com.ivor.openstream.domain.model.MediaIdentity
 import com.ivor.openstream.domain.model.StreamQuality
 import com.ivor.openstream.domain.model.VideoServer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -31,7 +32,6 @@ class StremioAddonProvider(
         val addonId = if (type == "series") "$baseId:${identity.season}:${identity.episode}" else baseId
         val url = endpoint.trimEnd('/') + "/stream/$type/$addonId.json"
         require(ProviderRuntimePolicy.isAllowedUrl(url)) { "Addon endpoint is not allowed" }
-
         val request = Request.Builder().url(url).header("Accept", "application/json").build()
         client.newCall(request).execute().use { response ->
             require(response.isSuccessful) { "Addon returned HTTP ${response.code}" }
