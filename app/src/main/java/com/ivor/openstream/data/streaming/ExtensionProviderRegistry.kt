@@ -10,12 +10,14 @@ import com.ivor.openstream.data.streaming.anime.AnimeSiteSpec
 import com.ivor.openstream.data.streaming.anime.CloudflareClearance
 import com.ivor.openstream.data.streaming.anime.MegaplayExtractor
 import com.ivor.openstream.data.streaming.anime.ReAnimeProvider
+import com.ivor.openstream.data.streaming.providers.StremioAddonProvider
 import com.ivor.openstream.data.streaming.providers.VidkingDirectApi
 import com.ivor.openstream.data.streaming.providers.VidkingDirectProvider
 import com.ivor.openstream.data.streaming.providers.VidkingServerSpec
 import com.ivor.openstream.data.streaming.providers.WebEmbedProvider
 import com.ivor.openstream.data.streaming.providers.WebEmbedResolver
 import com.ivor.openstream.data.streaming.providers.WebEmbedSpec
+import com.ivor.openstream.data.streaming.providers.WebJsonProvider
 import com.ivor.openstream.domain.model.ExtensionEngineType
 import com.ivor.openstream.domain.model.ExtensionManifest
 import com.ivor.openstream.domain.model.MarketplaceExtension
@@ -44,12 +46,7 @@ class ExtensionStreamProvider(
         delegate.resolve(identity)
 }
 
-/**
- * Builds runtime stream providers from installed extension manifests.
- *
- * This is the seam that makes the marketplace real: adding a source is a data change in a
- * repository index, not a new `@Provides` in a Dagger module.
- */
+/** Builds runtime stream providers from installed extension manifests. */
 @Singleton
 class ExtensionProviderRegistry @Inject constructor(
     private val extensionRepository: ExtensionRepository,
@@ -110,6 +107,22 @@ class ExtensionProviderRegistry @Inject constructor(
                     isFallback = manifest.isFallback
                 )
             )
+            ExtensionEngineType.WEB_JSON -> WebJsonProvider(
+                id = manifest.id,
+                name = manifest.name,
+                endpointTemplate = engine.endpoint,
+                priority = engine.priority,
+                client = streamingClient,
+                json = json
+            )
+            ExtensionEngineType.STREMIO_ADDON -> StremioAddonProvider(
+                id = manifest.id,
+                name = manifest.name,
+                endpoint = engine.endpoint,
+                priority = engine.priority,
+                client = streamingClient,
+                json = json
+            )
             ExtensionEngineType.ANIKOTO -> AnikotoProvider(
                 spec = animeSiteSpec(manifest),
                 mapper = animeEpisodeMapper,
@@ -141,6 +154,7 @@ class ExtensionProviderRegistry @Inject constructor(
                 mapper = animeEpisodeMapper,
                 client = streamingClient
             )
+            ExtensionEngineType.SANDBOXED_PLUGIN,
             ExtensionEngineType.UNSUPPORTED -> return null
         }
 
