@@ -16,7 +16,7 @@ internal object ServerRanker {
         (existing + incoming).forEach { candidate ->
             val key = sourceKey(candidate)
             val current = merged[key]
-            if (current == null || compare(candidate, current, providerPriorities) < 0) {
+            if (current == null || isBetterSource(candidate, current, providerPriorities)) {
                 merged[key] = candidate
             }
         }
@@ -37,6 +37,21 @@ internal object ServerRanker {
             .sortedBy { it.key.lowercase() }
             .joinToString("&") { "${it.key.lowercase()}=${it.value}" }
         return "${server.providerId}|$normalizedUrl|$normalizedHeaders"
+    }
+
+    /** Replaces a duplicate only when its meaningful ranking signals are actually better. */
+    private fun isBetterSource(
+        candidate: VideoServer,
+        current: VideoServer,
+        providerPriorities: Map<String, Int>
+    ): Boolean {
+        val quality = candidate.quality.rank.compareTo(current.quality.rank)
+        if (quality != 0) return quality > 0
+        val audio = candidate.audio.rank.compareTo(current.audio.rank)
+        if (audio != 0) return audio > 0
+        val candidatePriority = providerPriorities[candidate.providerId] ?: Int.MAX_VALUE
+        val currentPriority = providerPriorities[current.providerId] ?: Int.MAX_VALUE
+        return candidatePriority < currentPriority
     }
 
     private fun compare(
