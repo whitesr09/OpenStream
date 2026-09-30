@@ -6,10 +6,10 @@ import com.ivor.openstream.domain.model.ServerResolution
 import com.ivor.openstream.domain.model.VideoServer
 import com.ivor.openstream.domain.repository.StreamingRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,18 +40,16 @@ class StreamingRepositoryImpl @Inject constructor(
         val cacheKey = "${identity.cacheKey}:$includeFallbacks"
         val cached = serverCache[cacheKey]
         if (cached != null && System.currentTimeMillis() - cached.savedAt < SERVER_CACHE_TTL_MS && cached.servers.isNotEmpty()) {
-            send(
-                ServerResolution(
-                    servers = cached.servers,
-                    completedProviders = cached.servers.size,
-                    totalProviders = cached.servers.size,
-                    isComplete = true
-                )
-            )
+            send(ServerResolution(
+                servers = cached.servers,
+                completedProviders = cached.servers.size,
+                totalProviders = cached.servers.size,
+                isComplete = true
+            ))
             return@channelFlow
         }
 
-        // External-ID enrichment is optional. Never make stream discovery wait on it.
+        // Identity enrichment is useful metadata, not a prerequisite for finding a stream.
         val enrichedIdentityDeferred = async(Dispatchers.IO) {
             withTimeoutOrNull(ID_ENRICH_TIMEOUT_MS) { idMappingService.enrich(identity) } ?: identity
         }
@@ -64,9 +62,7 @@ class StreamingRepositoryImpl @Inject constructor(
         val enabledProviders = installedProviders.sortedWith(
             compareBy<ExtensionStreamProvider> { if (it.id == preferredServerProviderId) 0 else 1 }
                 .thenBy { it.priority }
-        ).filter {
-            it.isEnabled && (consecutiveFailures[it.id] ?: 0) < CIRCUIT_BREAKER_THRESHOLD
-        }
+        ).filter { it.isEnabled && (consecutiveFailures[it.id] ?: 0) < CIRCUIT_BREAKER_THRESHOLD }
         val directProviders = if (includeFallbacks) enabledProviders else enabledProviders.filterNot(ExtensionStreamProvider::isFallback)
         val fallbackProviders = if (includeFallbacks) emptyList() else enabledProviders.filter(ExtensionStreamProvider::isFallback)
         val firstStageProviders = directProviders.ifEmpty { fallbackProviders }
@@ -80,9 +76,7 @@ class StreamingRepositoryImpl @Inject constructor(
         val outcomes = Channel<ProviderOutcome>(enabledProviders.size)
         firstStageProviders.forEach { provider ->
             launch(Dispatchers.IO) {
-                val result = runCatching {
-                    withTimeout(PROVIDER_TIMEOUT_MS) { provider.resolve(enrichedIdentity).getOrThrow() }
-                }
+                val result = runCatching { withTimeout(PROVIDER_TIMEOUT_MS) { provider.resolve(enrichedIdentity).getOrThrow() } }
                 outcomes.send(ProviderOutcome(provider, result))
             }
         }
@@ -107,23 +101,19 @@ class StreamingRepositoryImpl @Inject constructor(
             val completed = completedIndex + 1
             val firstStageComplete = completed == firstStageProviders.size
             val shouldTryFallback = firstStageComplete && deferredFallbackProviders.isNotEmpty()
-            send(
-                ServerResolution(
-                    servers = servers,
-                    completedProviders = completed,
-                    totalProviders = firstStageProviders.size + if (shouldTryFallback) deferredFallbackProviders.size else 0,
-                    failedProviders = failedProviders.toList(),
-                    isComplete = firstStageComplete && !shouldTryFallback
-                )
-            )
+            send(ServerResolution(
+                servers = servers,
+                completedProviders = completed,
+                totalProviders = firstStageProviders.size + if (shouldTryFallback) deferredFallbackProviders.size else 0,
+                failedProviders = failedProviders.toList(),
+                isComplete = firstStageComplete && !shouldTryFallback
+            ))
         }
 
         if (deferredFallbackProviders.isNotEmpty()) {
             deferredFallbackProviders.forEach { provider ->
                 launch(Dispatchers.IO) {
-                    val result = runCatching {
-                        withTimeout(PROVIDER_TIMEOUT_MS) { provider.resolve(enrichedIdentity).getOrThrow() }
-                    }
+                    val result = runCatching { withTimeout(PROVIDER_TIMEOUT_MS) { provider.resolve(enrichedIdentity).getOrThrow() } }
                     outcomes.send(ProviderOutcome(provider, result))
                 }
             }
@@ -143,15 +133,13 @@ class StreamingRepositoryImpl @Inject constructor(
                     }
                 )
                 val completed = firstStageProviders.size + completedIndex + 1
-                send(
-                    ServerResolution(
-                        servers = servers,
-                        completedProviders = completed,
-                        totalProviders = firstStageProviders.size + deferredFallbackProviders.size,
-                        failedProviders = failedProviders.toList(),
-                        isComplete = completedIndex == deferredFallbackProviders.lastIndex
-                    )
-                )
+                send(ServerResolution(
+                    servers = servers,
+                    completedProviders = completed,
+                    totalProviders = firstStageProviders.size + deferredFallbackProviders.size,
+                    failedProviders = failedProviders.toList(),
+                    isComplete = completedIndex == deferredFallbackProviders.lastIndex
+                ))
             }
         }
         if (servers.isNotEmpty()) serverCache[cacheKey] = CachedServers(System.currentTimeMillis(), servers)
