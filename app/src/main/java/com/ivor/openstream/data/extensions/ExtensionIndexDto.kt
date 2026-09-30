@@ -8,10 +8,11 @@ import kotlinx.serialization.json.JsonPrimitive
 /**
  * Wire format for an OpenStream extension repository.
  *
- * The shape is deliberately close to formats users already know:
- *  - CloudStream `repo.json`: `name` / `description` / `manifestVersion` / list-of-lists indirection.
- *  - Mihon & Aniyomi `index.min.json`: a flat array of entries is also accepted.
- *  - Stremio add-on manifests: entries are declarative, the client owns the runtime.
+ * The primary format is OpenStream's declarative manifest. A few common extension-index fields
+ * are also accepted so repositories originating from Mihon/Aninyomi-style APK indexes can be
+ * imported and displayed instead of being rejected because they do not contain an OpenStream
+ * engine object. APK binaries remain metadata-only until an explicit, isolated provider contract
+ * exists; OpenStream never executes repository-supplied APK code in its own process.
  */
 @Serializable
 data class ExtensionRepoDto(
@@ -29,8 +30,8 @@ data class ExtensionRepoDto(
 
 @Serializable
 data class ExtensionEntryDto(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     val description: String = "",
     val version: String = "1.0.0",
     val versionCode: Int = 1,
@@ -51,7 +52,13 @@ data class ExtensionEntryDto(
     val homepage: String? = null,
     val fallback: Boolean = false,
     val installedByDefault: Boolean = false,
-    val engine: ExtensionEngineDto
+    /** Mihon/Aninyomi-compatible package identifier. */
+    val pkg: String? = null,
+    /** Mihon/Aninyomi-compatible APK download URL. */
+    val apk: String? = null,
+    /** Mihon/Aninyomi-compatible numeric source code. */
+    val code: Int? = null,
+    val engine: ExtensionEngineDto = ExtensionEngineDto(type = "unsupported")
 )
 
 @Serializable
