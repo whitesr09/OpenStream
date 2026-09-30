@@ -34,11 +34,16 @@ class WebJsonProvider(
         val request = Request.Builder().url(url).header("Accept", "application/json").build()
         client.newCall(request).execute().use { response ->
             require(response.isSuccessful) { "Provider returned HTTP ${response.code}" }
-            val body = response.body?.string().orEmpty()
-            require(body.toByteArray().size.toLong() <= ProviderRuntimePolicy.MAX_RESPONSE_BYTES) {
+            val body = response.body ?: error("Provider returned an empty response")
+            val declaredLength = body.contentLength()
+            require(declaredLength < 0 || declaredLength <= ProviderRuntimePolicy.MAX_RESPONSE_BYTES) {
                 "Provider response is too large"
             }
-            parse(body)
+            val text = body.string()
+            require(text.toByteArray(Charsets.UTF_8).size.toLong() <= ProviderRuntimePolicy.MAX_RESPONSE_BYTES) {
+                "Provider response is too large"
+            }
+            parse(text)
         }
     }
 
@@ -46,11 +51,14 @@ class WebJsonProvider(
         val root = json.parseToJsonElement(body)
         val entries: JsonArray = when (root) {
             is JsonArray -> root
-            is JsonObject -> root["streams"]?.jsonArray ?: JsonArray(emptyList())
+            is JsonObject -> sequenceOf("streams", "sources", "results", "data")
+                .mapNotNull { key -> root[key] as? JsonArray }
+                .firstOrNull()
+                ?: JsonArray(emptyList())
             else -> JsonArray(emptyList())
         }
         return entries.mapNotNull { element ->
-            val obj = element.jsonObject
+            val obj = element as? JsonObject ?: return@mapNotNull null
             val url = obj["url"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
             if (!ProviderRuntimePolicy.isAllowedUrl(url)) return@mapNotNull null
             val headers = obj["headers"]?.jsonObject
@@ -73,8 +81,12 @@ class WebJsonProvider(
 
     private fun expand(template: String, identity: MediaIdentity): String = template
         .replace("{title}", java.net.URLEncoder.encode(identity.title, "UTF-8"))
+        .replace("{originalTitle}", java.net.URLEncoder.encode(identity.originalTitle.orEmpty(), "UTF-8"))
         .replace("{imdbId}", identity.imdbId.orEmpty())
         .replace("{tmdbId}", identity.tmdbId.toString())
+        .replace("{anilistId}", identity.anilistId?.toString().orEmpty())
+        .replace("{malId}", identity.malId?.toString().orEmpty())
+        .replace("{type}", identity.tmdbType)
         .replace("{season}", identity.season.toString())
         .replace("{episode}", identity.episode.toString())
         .replace("{year}", identity.year?.toString().orEmpty())
