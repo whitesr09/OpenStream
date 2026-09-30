@@ -5,7 +5,6 @@ import java.net.URI
 /** Conservative network policy for remotely described providers. */
 object ProviderRuntimePolicy {
     const val MAX_RESPONSE_BYTES = 8L * 1024L * 1024L
-    const val MAX_REDIRECTS = 5
 
     /** Only public HTTPS/HTTP endpoints are accepted by generic web runtimes. */
     fun isAllowedUrl(raw: String, allowHttp: Boolean = false): Boolean {
