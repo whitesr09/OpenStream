@@ -12,6 +12,7 @@ import com.ivor.openstream.domain.model.WatchProgress
 import com.ivor.openstream.domain.repository.AnimeRepository
 import com.ivor.openstream.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,7 @@ class HomeViewModel @Inject constructor(
     profileRepository: ProfileRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
+    private var loadJob: Job? = null
     val uiState: StateFlow<HomeUiState> = combine(_uiState, hiddenTitlesRepository.hiddenKeys) { state, hidden ->
         if (state is HomeUiState.Success && hidden.isNotEmpty()) state.without(hidden) else state
     }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState.Loading)
@@ -75,7 +77,8 @@ class HomeViewModel @Inject constructor(
     }
 
     fun loadData(showLoading: Boolean = true, forceRefresh: Boolean = false) {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             if (showLoading) _uiState.value = HomeUiState.Loading
             val primaryCatalogs = listOf(AnimeCatalog.TRENDING, AnimeCatalog.POPULAR_MOVIES, AnimeCatalog.POPULAR_SERIES)
             val secondaryCatalogs = listOf(
@@ -84,46 +87,50 @@ class HomeViewModel @Inject constructor(
                 AnimeCatalog.TOP_RATED_MOVIES,
                 AnimeCatalog.ANIME_MOVIES
             )
-            val allCatalogs = primaryCatalogs + secondaryCatalogs
+
+            fun buildRails(catalogs: Map<AnimeCatalog, List<AnimeDto>>): List<HomeRail> {
+                val watching = continueWatching.value
+                val moviePreference = watching.count { it.mediaType == "movie" } >= watching.count { it.mediaType == "tv" }
+                val firstType = if (moviePreference) AnimeCatalog.POPULAR_MOVIES else AnimeCatalog.POPULAR_SERIES
+                val secondType = if (moviePreference) AnimeCatalog.POPULAR_SERIES else AnimeCatalog.POPULAR_MOVIES
+                val preferredLabel = if (moviePreference) "movies" else "series"
+                val trending = catalogs[AnimeCatalog.TRENDING].orEmpty()
+                return listOf(
+                    HomeRail("trending", "Trending now", RailStyle.RANKED, trending.take(10)),
+                    HomeRail("preferred", "Because you watch $preferredLabel", RailStyle.POSTER, catalogs[firstType].orEmpty()),
+                    HomeRail("continue", "Continue exploring", RailStyle.LANDSCAPE, catalogs[secondType].orEmpty().filter { it.backdropPath != null }),
+                    HomeRail("new-episodes", "New episodes this week", RailStyle.LANDSCAPE, catalogs[AnimeCatalog.NEW_EPISODES].orEmpty().filter { it.backdropPath != null }),
+                    HomeRail("anime", "Trending anime", RailStyle.POSTER, catalogs[AnimeCatalog.TRENDING_ANIME].orEmpty()),
+                    HomeRail("top-rated", "Critically acclaimed", RailStyle.POSTER, catalogs[AnimeCatalog.TOP_RATED_MOVIES].orEmpty()),
+                    HomeRail("anime-movies", "Anime movies", RailStyle.POSTER, catalogs[AnimeCatalog.ANIME_MOVIES].orEmpty())
+                ).filter { it.items.isNotEmpty() }
+            }
 
             coroutineScope {
-                val requests = allCatalogs.associateWith { catalog ->
+                val primary = primaryCatalogs.associateWith { catalog ->
                     async { repository.getCatalog(catalog, forceRefresh).getOrDefault(emptyList()) }
-                }
+                }.mapValues { it.value.await() }
 
-                fun buildRails(catalogs: Map<AnimeCatalog, List<AnimeDto>>): List<HomeRail> {
-                    val watching = continueWatching.value
-                    val moviePreference = watching.count { it.mediaType == "movie" } >= watching.count { it.mediaType == "tv" }
-                    val firstType = if (moviePreference) AnimeCatalog.POPULAR_MOVIES else AnimeCatalog.POPULAR_SERIES
-                    val secondType = if (moviePreference) AnimeCatalog.POPULAR_SERIES else AnimeCatalog.POPULAR_MOVIES
-                    val preferredLabel = if (moviePreference) "movies" else "series"
-                    val trending = catalogs[AnimeCatalog.TRENDING].orEmpty()
-                    return listOf(
-                        HomeRail("trending", "Trending now", RailStyle.RANKED, trending.take(10)),
-                        HomeRail("preferred", "Because you watch $preferredLabel", RailStyle.POSTER, catalogs[firstType].orEmpty()),
-                        HomeRail("continue", "Continue exploring", RailStyle.LANDSCAPE, catalogs[secondType].orEmpty().filter { it.backdropPath != null }),
-                        HomeRail("new-episodes", "New episodes this week", RailStyle.LANDSCAPE, catalogs[AnimeCatalog.NEW_EPISODES].orEmpty().filter { it.backdropPath != null }),
-                        HomeRail("anime", "Trending anime", RailStyle.POSTER, catalogs[AnimeCatalog.TRENDING_ANIME].orEmpty()),
-                        HomeRail("top-rated", "Critically acclaimed", RailStyle.POSTER, catalogs[AnimeCatalog.TOP_RATED_MOVIES].orEmpty()),
-                        HomeRail("anime-movies", "Anime movies", RailStyle.POSTER, catalogs[AnimeCatalog.ANIME_MOVIES].orEmpty())
-                    ).filter { it.items.isNotEmpty() }
-                }
-
-                val primary = primaryCatalogs.associateWith { requests.getValue(it).await() }
                 if (primary.values.all { it.isEmpty() }) {
                     _uiState.value = HomeUiState.Error("Couldn't reach the catalog")
                     return@coroutineScope
                 }
+
                 _uiState.value = HomeUiState.Success(
-                    hero = primary[AnimeCatalog.TRENDING].orEmpty().filter { it.posterPath != null }.take(8),
+                    hero = primary[AnimeCatalog.TRENDING].orEmpty().filter { it.posterPath != null }.take(5),
                     rails = buildRails(primary)
                 )
 
-                val all = allCatalogs.associateWith { requests.getValue(it).await() }
+                // Secondary rails load after the first screen is usable, reducing network and
+                // image contention on slower devices.
+                val secondary = secondaryCatalogs.associateWith { catalog ->
+                    async { repository.getCatalog(catalog, forceRefresh).getOrDefault(emptyList()) }
+                }.mapValues { it.value.await() }
+                val all = primary + secondary
                 val current = _uiState.value
                 if (current is HomeUiState.Success) {
                     _uiState.value = current.copy(
-                        hero = all[AnimeCatalog.TRENDING].orEmpty().filter { it.posterPath != null }.take(8),
+                        hero = all[AnimeCatalog.TRENDING].orEmpty().filter { it.posterPath != null }.take(5),
                         rails = buildRails(all),
                         isRefreshing = false
                     )

@@ -42,7 +42,7 @@ fun AnimeCard(
     ) {
         Box {
             AsyncImage(
-                model = "https://image.tmdb.org/t/p/w500${anime.posterPath}",
+                model = "https://image.tmdb.org/t/p/w342${anime.posterPath}",
                 contentDescription = anime.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

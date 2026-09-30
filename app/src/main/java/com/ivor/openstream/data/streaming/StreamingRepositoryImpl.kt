@@ -9,10 +9,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -49,8 +51,13 @@ class StreamingRepositoryImpl @Inject constructor(
             return@channelFlow
         }
 
-        val enrichedIdentity = idMappingService.enrich(identity)
-        val installedProviders = withContext(Dispatchers.IO) { providerRegistry.activeProviders() }
+        // External-ID enrichment is optional. Never make stream discovery wait on it.
+        val enrichedIdentityDeferred = async(Dispatchers.IO) {
+            withTimeoutOrNull(ID_ENRICH_TIMEOUT_MS) { idMappingService.enrich(identity) } ?: identity
+        }
+        val installedProvidersDeferred = async(Dispatchers.IO) { providerRegistry.activeProviders() }
+        val enrichedIdentity = enrichedIdentityDeferred.await()
+        val installedProviders = installedProvidersDeferred.await()
         val providerPriorities = installedProviders.associate { it.id to it.priority }
         val preferredServerId = preferences.getString(preferenceKey(identity), null)
         val preferredServerProviderId = preferredServerId?.substringBefore(":")
@@ -177,7 +184,8 @@ class StreamingRepositoryImpl @Inject constructor(
 
     private companion object {
         const val PROVIDER_TIMEOUT_MS = 8_000L
-        const val SERVER_CACHE_TTL_MS = 5 * 60 * 1000L
+        const val SERVER_CACHE_TTL_MS = 10 * 60 * 1000L
+        const val ID_ENRICH_TIMEOUT_MS = 1_500L
         const val CIRCUIT_BREAKER_THRESHOLD = 5
     }
 }

@@ -369,7 +369,7 @@ private fun RankedRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onHide
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        itemsIndexed(items, key = { _, anime -> anime.id }) { index, anime ->
+        itemsIndexed(items, key = { _, anime -> if (anime.isMovie) "movie:${anime.id}" else "tv:${anime.id}" }) { index, anime ->
             var menuOpen by remember { mutableStateOf(false) }
             Box(modifier = Modifier.size(width = 184.dp, height = 214.dp)) {
                 Text(
@@ -420,7 +420,7 @@ private fun LandscapeRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onH
         ) {
             NotInterestedMenu(menuOpen, onDismiss = { menuOpen = false }, onHide = { onHide(anime) })
             AsyncImage(
-                model = "https://image.tmdb.org/t/p/w780${anime.backdropPath}",
+                model = "https://image.tmdb.org/t/p/w500${anime.backdropPath}",
                 contentDescription = anime.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
