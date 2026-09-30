@@ -7,12 +7,8 @@ package com.ivor.openstream.domain.model
  */
 const val EXTENSION_API_VERSION: Int = 1
 
-/** Availability reported by the repository. Status codes match CloudStream's convention. */
 enum class ExtensionStatus(val code: Int, val label: String) {
-    DOWN(0, "Down"),
-    OK(1, "Online"),
-    SLOW(2, "Slow"),
-    BETA(3, "Beta");
+    DOWN(0, "Down"), OK(1, "Online"), SLOW(2, "Slow"), BETA(3, "Beta");
 
     companion object {
         fun fromCode(code: Int): ExtensionStatus = entries.firstOrNull { it.code == code } ?: OK
@@ -20,20 +16,24 @@ enum class ExtensionStatus(val code: Int, val label: String) {
 }
 
 /**
- * The runtime an extension binds to. Manifests are declarative — like a Stremio add-on they
- * describe *where* to resolve streams, and the app supplies the engine that talks the protocol.
+ * The runtime an extension binds to. Manifests remain declarative: repositories select a runtime
+ * and provide configuration, while executable provider code stays inside OpenStream.
  */
 enum class ExtensionEngineType(val key: String) {
     VIDKING_DIRECT("vidking-direct"),
     VIDKING_WEBVIEW("vidking-webview"),
-    /** Any embeddable web player, described by URL templates. */
     WEB_EMBED("web-embed"),
-    /** Anime sites; `endpoint` is the site's origin. Titles are matched through AniList. */
+    /** Generic HTTPS JSON stream API using the documented OpenStream response schema. */
+    WEB_JSON("web-json"),
+    /** Generic Stremio-compatible addon stream endpoint. */
+    STREMIO_ADDON("stremio-addon"),
     ANIKOTO("anikoto"),
     REANIME("reanime"),
     ANIMEPAHE("animepahe"),
     FOURANIMO("fouranimo"),
     ANIMEGG("animegg"),
+    /** Reserved for a future isolated-process plugin runtime. Never executed in-process. */
+    SANDBOXED_PLUGIN("sandboxed-plugin"),
     UNSUPPORTED("unsupported");
 
     companion object {
@@ -48,7 +48,6 @@ data class ExtensionEngine(
     val priority: Int = DEFAULT_PRIORITY,
     val language: String? = null,
     val qualityFilter: String? = null,
-    /** `web-embed` only: player URL templates, see `WebEmbedSpec`. */
     val movieUrl: String? = null,
     val tvUrl: String? = null
 ) {
@@ -58,11 +57,14 @@ data class ExtensionEngine(
             ExtensionEngineType.VIDKING_WEBVIEW -> true
             ExtensionEngineType.WEB_EMBED ->
                 listOfNotNull(movieUrl, tvUrl).any { it.startsWith("https://") }
+            ExtensionEngineType.WEB_JSON,
+            ExtensionEngineType.STREMIO_ADDON -> endpoint.startsWith("https://")
             ExtensionEngineType.ANIKOTO,
             ExtensionEngineType.REANIME,
             ExtensionEngineType.ANIMEPAHE,
             ExtensionEngineType.FOURANIMO,
             ExtensionEngineType.ANIMEGG -> endpoint.startsWith("https://")
+            ExtensionEngineType.SANDBOXED_PLUGIN,
             ExtensionEngineType.UNSUPPORTED -> false
         }
 
@@ -71,7 +73,6 @@ data class ExtensionEngine(
     }
 }
 
-/** A single catalog entry as published by a repository. */
 data class ExtensionManifest(
     val id: String,
     val repoId: String,
@@ -96,22 +97,16 @@ data class ExtensionManifest(
     val isFallback: Boolean = false,
     val installedByDefault: Boolean = false
 ) {
-    /** Globally unique across repositories — two repos may publish the same extension id. */
     val key: String get() = "$repoId/$id"
-
     val author: String get() = authors.firstOrNull().orEmpty().ifBlank { "Community" }
-
     val isSupported: Boolean get() = engine.isRunnable && apiVersion <= EXTENSION_API_VERSION
 }
 
-/** How often this extension actually produced a playable stream on this device. */
 data class ExtensionUsage(
     val successes: Int = 0,
     val failures: Int = 0
 ) {
     val total: Int get() = successes + failures
-
-    /** Null until there is enough local history to be meaningful. */
     val successRate: Float?
         get() = if (total < MIN_SAMPLES) null else successes.toFloat() / total
 
@@ -147,11 +142,7 @@ data class ExtensionRepo(
 )
 
 enum class MarketplaceSort(val label: String) {
-    POPULAR("Popular"),
-    TRENDING("Trending"),
-    TOP_RATED("Top rated"),
-    RECENT("Recently updated"),
-    NAME("A–Z")
+    POPULAR("Popular"), TRENDING("Trending"), TOP_RATED("Top rated"), RECENT("Recently updated"), NAME("A–Z")
 }
 
 data class ExtensionCatalog(
