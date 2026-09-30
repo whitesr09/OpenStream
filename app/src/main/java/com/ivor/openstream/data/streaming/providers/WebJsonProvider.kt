@@ -19,12 +19,11 @@ class WebJsonProvider(
     private val id: String,
     private val name: String,
     private val endpointTemplate: String,
-    private val priority: Int,
+    override val priority: Int,
     private val client: OkHttpClient,
     private val json: Json
 ) : StreamProvider {
     override val displayName: String = name
-    override val priority: Int = priority
     override val isEnabled: Boolean = true
     override val isFallback: Boolean = false
 
@@ -40,7 +39,7 @@ class WebJsonProvider(
         client.newCall(request).execute().use { response ->
             require(response.isSuccessful) { "Provider returned HTTP ${response.code}" }
             val body = response.body?.string().orEmpty()
-            require(body.toByteArray().size <= ProviderRuntimePolicy.MAX_RESPONSE_BYTES) {
+            require(body.toByteArray().size.toLong() <= ProviderRuntimePolicy.MAX_RESPONSE_BYTES) {
                 "Provider response is too large"
             }
             parse(body)
