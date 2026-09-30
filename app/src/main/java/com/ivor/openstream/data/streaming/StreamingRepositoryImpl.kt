@@ -28,7 +28,7 @@ class StreamingRepositoryImpl @Inject constructor(
     @Named("StreamingClient") private val client: OkHttpClient,
     private val preferences: SharedPreferences
 ) : StreamingRepository {
-    private val consecutiveFailures = ConcurrentHashMap<String, Int>()
+    private val providerFailures = ConcurrentHashMap<String, FailureState>()
 
     override fun resolveServers(
         identity: MediaIdentity,
@@ -39,11 +39,12 @@ class StreamingRepositoryImpl @Inject constructor(
         val providerPriorities = installedProviders.associate { it.id to it.priority }
         val preferredServerId = preferences.getString(preferenceKey(identity), null)
         val preferredServerProviderId = preferredServerId?.substringBefore(":")
+        val now = System.currentTimeMillis()
         val enabledProviders = installedProviders.sortedWith(
             compareBy<ExtensionStreamProvider> { if (it.id == preferredServerProviderId) 0 else 1 }
                 .thenBy { it.priority }
         ).filter {
-            it.isEnabled && (consecutiveFailures[it.id] ?: 0) < CIRCUIT_BREAKER_THRESHOLD
+            it.isEnabled && !isCircuitOpen(it.id, now)
         }
         val directProviders = if (includeFallbacks) {
             enabledProviders
@@ -63,7 +64,7 @@ class StreamingRepositoryImpl @Inject constructor(
             return@channelFlow
         }
 
-        val outcomes = Channel<ProviderOutcome>(enabledProviders.size)
+        val outcomes = Channel<ProviderOutcome>(enabledProviders.size.coerceAtLeast(1))
         firstStageProviders.forEach { provider ->
             launch(Dispatchers.IO) {
                 val result = runCatching {
@@ -81,7 +82,7 @@ class StreamingRepositoryImpl @Inject constructor(
             val outcome = outcomes.receive()
             outcome.result.fold(
                 onSuccess = { incoming ->
-                    consecutiveFailures[outcome.provider.id] = 0
+                    providerFailures.remove(outcome.provider.id)
                     providerRegistry.recordOutcome(outcome.provider, incoming.isNotEmpty())
                     if (incoming.isEmpty()) {
                         failedProviders += outcome.provider.displayName
@@ -95,19 +96,14 @@ class StreamingRepositoryImpl @Inject constructor(
                     }
                 },
                 onFailure = {
-                    consecutiveFailures.compute(outcome.provider.id) { _, count -> (count ?: 0) + 1 }
+                    recordFailure(outcome.provider.id)
                     providerRegistry.recordOutcome(outcome.provider, false)
                     failedProviders += outcome.provider.displayName
                 }
             )
             val completed = completedIndex + 1
             val firstStageComplete = completed == firstStageProviders.size
-            // Coverage mode: direct sources are resolved first, but fallback sources are still
-        // queried afterwards even when a direct source returned something. This prevents the
-        // first successful provider from hiding titles/qualities/languages that another source
-        // can provide.
-        val shouldTryFallback = firstStageComplete &&
-                deferredFallbackProviders.isNotEmpty()
+            val shouldTryFallback = firstStageComplete && deferredFallbackProviders.isNotEmpty()
             send(
                 ServerResolution(
                     servers = servers,
@@ -136,7 +132,7 @@ class StreamingRepositoryImpl @Inject constructor(
                 val outcome = outcomes.receive()
                 outcome.result.fold(
                     onSuccess = { incoming ->
-                        consecutiveFailures[outcome.provider.id] = 0
+                        providerFailures.remove(outcome.provider.id)
                         providerRegistry.recordOutcome(outcome.provider, incoming.isNotEmpty())
                         if (incoming.isEmpty()) {
                             failedProviders += outcome.provider.displayName
@@ -150,7 +146,7 @@ class StreamingRepositoryImpl @Inject constructor(
                         }
                     },
                     onFailure = {
-                        consecutiveFailures.compute(outcome.provider.id) { _, count -> (count ?: 0) + 1 }
+                        recordFailure(outcome.provider.id)
                         providerRegistry.recordOutcome(outcome.provider, false)
                         failedProviders += outcome.provider.displayName
                     }
@@ -195,13 +191,39 @@ class StreamingRepositoryImpl @Inject constructor(
     private fun preferenceKey(identity: MediaIdentity): String =
         "last_stream_server:${identity.cacheKey}"
 
+    private fun isCircuitOpen(providerId: String, now: Long): Boolean {
+        val state = providerFailures[providerId] ?: return false
+        if (now - state.lastFailureAt >= CIRCUIT_BREAKER_COOLDOWN_MS) {
+            providerFailures.remove(providerId, state)
+            return false
+        }
+        return state.count >= CIRCUIT_BREAKER_THRESHOLD
+    }
+
+    private fun recordFailure(providerId: String) {
+        providerFailures.compute(providerId) { _, previous ->
+            val now = System.currentTimeMillis()
+            val previousState = previous ?: FailureState()
+            FailureState(
+                count = (previousState.count + 1).coerceAtMost(CIRCUIT_BREAKER_THRESHOLD),
+                lastFailureAt = now
+            )
+        }
+    }
+
     private data class ProviderOutcome(
         val provider: ExtensionStreamProvider,
         val result: Result<List<VideoServer>>
     )
 
+    private data class FailureState(
+        val count: Int = 0,
+        val lastFailureAt: Long = 0L
+    )
+
     private companion object {
         const val PROVIDER_TIMEOUT_MS = 12_000L
         const val CIRCUIT_BREAKER_THRESHOLD = 5
+        const val CIRCUIT_BREAKER_COOLDOWN_MS = 5 * 60_000L
     }
 }
