@@ -120,7 +120,7 @@ class ExtensionIndexParser @Inject constructor() {
             runCatching {
                 json.decodeFromJsonElement(ExtensionEntryDto.serializer(), element)
             }.getOrNull()
-        }
+        }.filter { it.id.isNotBlank() || !it.pkg.isNullOrBlank() }
 
     /** Entries are decoded one by one, so keep them out of the strict repository decode. */
     private fun stripEntries(root: JsonObject): JsonObject =
