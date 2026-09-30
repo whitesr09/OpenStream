@@ -20,10 +20,10 @@ object ProviderRuntimePolicy {
         val host = uri.host?.lowercase() ?: return false
         if (isBlockedLiteralHost(host)) return false
 
-        // Reject literal IPs that are private, loopback, link-local or otherwise local-only.
-        // DNS names are still allowed here; the HTTP stack remains responsible for normal TLS.
+        // Reject endpoints whose DNS resolution includes any private/local address. This is
+        // deliberately conservative to reduce DNS-rebinding/SSRF exposure for remote manifests.
         val addresses = runCatching { InetAddress.getAllByName(host) }.getOrNull().orEmpty()
-        if (addresses.isNotEmpty() && addresses.all(::isPrivateAddress)) return false
+        if (addresses.any(::isPrivateAddress)) return false
         return true
     }
 
