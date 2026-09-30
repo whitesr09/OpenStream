@@ -16,6 +16,7 @@ import com.ivor.openstream.domain.model.BrowseGenre
 import com.ivor.openstream.domain.model.CatalogContentType
 import com.ivor.openstream.domain.model.CatalogQuery
 import kotlinx.coroutines.awaitAll
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 class AnimeRepositoryImpl @Inject constructor(
@@ -147,8 +148,9 @@ class AnimeRepositoryImpl @Inject constructor(
                 "tv" -> api.searchTv(query.trim(), page, appSettingsStore.current.showAdultContent).results to emptyList()
                 "movie" -> emptyList<AnimeDto>() to api.searchMovie(query.trim(), page, appSettingsStore.current.showAdultContent).results
                 else -> {
-                    val tvRequest = async { api.searchTv(query.trim(), page).results }
-                    val movieRequest = async { api.searchMovie(query.trim(), page).results }
+                    val includeAdult = appSettingsStore.current.showAdultContent
+                    val tvRequest = async { api.searchTv(query.trim(), page, includeAdult).results }
+                    val movieRequest = async { api.searchMovie(query.trim(), page, includeAdult).results }
                     tvRequest.await() to movieRequest.await()
                 }
             }
@@ -191,25 +193,38 @@ class AnimeRepositoryImpl @Inject constructor(
             )
         }.distinctBy { "${it.mediaType}:${it.id}" }
     }
-    override suspend fun getAnimeDetails(id: Int): Result<AnimeDetailsDto> = runCatching {
-        api.getAnimeDetails(id = id)
-    }
+    override suspend fun getAnimeDetails(id: Int): Result<AnimeDetailsDto> =
+        getMediaDetails(id, "tv")
 
-    override suspend fun getMovieDetails(id: Int): Result<AnimeDetailsDto> = runCatching {
-        api.getMovieDetails(id = id)
-    }
+    override suspend fun getMovieDetails(id: Int): Result<AnimeDetailsDto> =
+        getMediaDetails(id, "movie")
 
-    override suspend fun getMediaDetails(id: Int, mediaType: String): Result<AnimeDetailsDto> = runCatching {
-        // Everything the title page shows, in one request.
-        if (mediaType == "movie") {
-            api.getMovieDetails(id = id, appendToResponse = "videos,credits,recommendations")
-        } else {
-            api.getAnimeDetails(id = id, appendToResponse = "videos,aggregate_credits,recommendations")
+    override suspend fun getMediaDetails(id: Int, mediaType: String): Result<AnimeDetailsDto> {
+        val key = "$mediaType:$id"
+        detailCache[key]?.takeIf { System.currentTimeMillis() - it.savedAt < DETAILS_CACHE_TTL_MS }?.let {
+            return Result.success(it.value)
+        }
+        return runCatching {
+            val details = if (mediaType == "movie") {
+                api.getMovieDetails(id = id, appendToResponse = "videos,credits,recommendations")
+            } else {
+                api.getAnimeDetails(id = id, appendToResponse = "videos,aggregate_credits,recommendations")
+            }
+            detailCache[key] = CachedDetails(System.currentTimeMillis(), details)
+            details
         }
     }
 
-    override suspend fun getSeasonDetails(animeId: Int, seasonNumber: Int): Result<SeasonDetailsDto> = runCatching {
-        api.getSeasonDetails(id = animeId, seasonNumber = seasonNumber)
+    override suspend fun getSeasonDetails(animeId: Int, seasonNumber: Int): Result<SeasonDetailsDto> {
+        val key = "$animeId:$seasonNumber"
+        seasonCache[key]?.takeIf { System.currentTimeMillis() - it.savedAt < SEASON_CACHE_TTL_MS }?.let {
+            return Result.success(it.value)
+        }
+        return runCatching {
+            api.getSeasonDetails(id = animeId, seasonNumber = seasonNumber).also {
+                seasonCache[key] = CachedSeason(System.currentTimeMillis(), it)
+            }
+        }
     }
 
     override suspend fun addToWatchHistory(anime: AnimeDto) {
@@ -234,7 +249,12 @@ class AnimeRepositoryImpl @Inject constructor(
         sharedPreferences.edit().remove(HISTORY_KEY).apply()
     }
 
-    private val catalogCache = java.util.concurrent.ConcurrentHashMap<String, CachedCatalog>()
+    private val catalogCache = ConcurrentHashMap<String, CachedCatalog>()
+    private val detailCache = ConcurrentHashMap<String, CachedDetails>()
+    private val seasonCache = ConcurrentHashMap<String, CachedSeason>()
+
+    private data class CachedDetails(val savedAt: Long, val value: AnimeDetailsDto)
+    private data class CachedSeason(val savedAt: Long, val value: SeasonDetailsDto)
 
     @kotlinx.serialization.Serializable
     private data class CachedCatalog(val savedAt: Long, val items: List<AnimeDto>)
@@ -242,5 +262,7 @@ class AnimeRepositoryImpl @Inject constructor(
     private companion object {
         const val ANIMATION_GENRE = 16
         const val CATALOG_TTL_MS = 3 * 60 * 60 * 1000L
+        const val DETAILS_CACHE_TTL_MS = 10 * 60 * 1000L
+        const val SEASON_CACHE_TTL_MS = 5 * 60 * 1000L
     }
 }

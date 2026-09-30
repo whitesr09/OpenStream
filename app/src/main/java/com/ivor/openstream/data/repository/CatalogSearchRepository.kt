@@ -5,10 +5,10 @@ import com.ivor.openstream.domain.model.CatalogContentType
 import com.ivor.openstream.domain.model.CatalogItem
 import com.ivor.openstream.domain.model.CatalogQuery
 import com.ivor.openstream.domain.repository.CatalogProvider
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,17 +20,22 @@ class CatalogSearchRepository @Inject constructor(
 ) {
     suspend fun search(query: CatalogQuery): Result<List<CatalogItem>> = runCatching {
         if (query.text.isBlank()) return@runCatching emptyList()
-        val enabled = providers.filter { it.id !in settingsStore.current.disabledCatalogProviders }.sortedBy { it.priority }
+        val enabled = providers
+            .filter { it.id !in settingsStore.current.disabledCatalogProviders }
+            .sortedBy { it.priority }
+
         val results = coroutineScope {
             enabled.map { provider ->
                 async {
-                    runCatching { provider.search(query).getOrDefault(emptyList()) }
-                        .onFailure { error -> if (error is CancellationException) throw error }
-                        .getOrDefault(emptyList())
-                        .map { ProviderResult(provider, it) }
+                    withTimeoutOrNull(PROVIDER_TIMEOUT_MS) {
+                        runCatching { provider.search(query).getOrDefault(emptyList()) }
+                            .getOrDefault(emptyList())
+                            .map { ProviderResult(provider, it) }
+                    }.orEmpty()
                 }
             }.awaitAll().flatten()
         }
+
         results
             .filter { query.includeAgeRestricted || !it.item.isAgeRestricted }
             .sortedWith(compareBy<ProviderResult> { it.provider.priority }.thenByDescending { it.item.popularity ?: 0.0 })
@@ -52,10 +57,15 @@ class CatalogSearchRepository @Inject constructor(
         val aIds = identityIds(a)
         val bIds = identityIds(b)
         if (aIds.isNotEmpty() && bIds.isNotEmpty() && aIds.any { it in bIds }) return true
+
         val aTitles = titleKeys(a)
         val bTitles = titleKeys(b)
         if (aTitles.none { it in bTitles }) return false
-        return a.year == null || b.year == null || a.year == b.year
+        return when {
+            a.year != null && b.year != null -> a.year == b.year
+            a.year == null && b.year == null -> true
+            else -> false
+        }
     }
 
     private fun merge(a: ProviderResult, b: ProviderResult): ProviderResult {
@@ -100,5 +110,9 @@ class CatalogSearchRepository @Inject constructor(
     }
 
     private data class ProviderResult(val provider: CatalogProvider, val item: CatalogItem)
-    private companion object { val ID_NAMESPACES = setOf("tmdb", "imdb", "tvdb", "tvmaze", "anilist", "mal") }
+
+    private companion object {
+        const val PROVIDER_TIMEOUT_MS = 8_000L
+        val ID_NAMESPACES = setOf("tmdb", "imdb", "tvdb", "tvmaze", "anilist", "mal")
+    }
 }

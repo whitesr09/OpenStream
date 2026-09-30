@@ -128,7 +128,6 @@ fun HomeScreen(
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    // Clears the floating toolbar and the mini player.
                     contentPadding = PaddingValues(bottom = 200.dp)
                 ) {
                     item(key = "hero") {
@@ -173,7 +172,6 @@ fun HomeScreen(
 
         SnackbarHost(
             hostState = snackbarHostState,
-            // Above the floating toolbar and the mini player.
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 180.dp)
@@ -208,7 +206,6 @@ private fun HeroSection(
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.weight(1f)
             )
-            // A kids profile keeps Settings and updates out of reach; leaving takes a hold on the avatar.
             if (profile?.isKids != true) {
                 IconButton(onClick = onUpdateClick) {
                     Icon(Icons.Default.SystemUpdate, contentDescription = "Check for updates")
@@ -222,7 +219,6 @@ private fun HeroSection(
 
         if (items.isNotEmpty()) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                // Wide screens (tablets, landscape) get landscape artwork at a calmer height.
                 val wide = maxWidth >= 600.dp
                 HorizontalCenteredHeroCarousel(
                     state = rememberCarouselState { items.size },
@@ -272,9 +268,9 @@ private fun CarouselItemScope.HeroCard(
     ) {
         AsyncImage(
             model = if (wide && anime.backdropPath != null) {
-                "https://image.tmdb.org/t/p/w1280${anime.backdropPath}"
+                "https://image.tmdb.org/t/p/w780${anime.backdropPath}"
             } else {
-                "https://image.tmdb.org/t/p/w780${anime.posterPath}"
+                "https://image.tmdb.org/t/p/w500${anime.posterPath}"
             },
             contentDescription = anime.name,
             contentScale = ContentScale.Crop,
@@ -290,7 +286,6 @@ private fun CarouselItemScope.HeroCard(
                     )
                 )
         )
-        // Text only belongs on the focused card; the side cards are slivers of artwork.
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -369,7 +364,7 @@ private fun RankedRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onHide
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        itemsIndexed(items, key = { _, anime -> anime.id }) { index, anime ->
+        itemsIndexed(items, key = { _, anime -> if (anime.isMovie) "movie:${anime.id}" else "tv:${anime.id}" }) { index, anime ->
             var menuOpen by remember { mutableStateOf(false) }
             Box(modifier = Modifier.size(width = 184.dp, height = 214.dp)) {
                 Text(
@@ -420,7 +415,7 @@ private fun LandscapeRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onH
         ) {
             NotInterestedMenu(menuOpen, onDismiss = { menuOpen = false }, onHide = { onHide(anime) })
             AsyncImage(
-                model = "https://image.tmdb.org/t/p/w780${anime.backdropPath}",
+                model = "https://image.tmdb.org/t/p/w500${anime.backdropPath}",
                 contentDescription = anime.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -452,9 +447,8 @@ private fun PosterRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onHide
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        itemsIndexed(items, key = { _, anime -> anime.id }) { _, anime ->
+        itemsIndexed(items, key = { _, anime -> if (anime.isMovie) "movie:${anime.id}" else "tv:${anime.id}" }) { _, anime ->
             var menuOpen by remember { mutableStateOf(false) }
-            // Only the artwork is rounded; clipping the whole card would cut into the title below it.
             Column(
                 modifier = Modifier
                     .width(132.dp)
