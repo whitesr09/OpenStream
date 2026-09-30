@@ -23,12 +23,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class RailStyle {
-    /** Big rank numerals beside posters, for a top-ten list. */
     RANKED,
-
-    /** Wide backdrop cards, for what is airing now. */
     LANDSCAPE,
-
     POSTER
 }
 
@@ -41,13 +37,11 @@ data class HomeRail(
 
 sealed interface HomeUiState {
     data object Loading : HomeUiState
-
     data class Success(
         val hero: List<AnimeDto>,
         val rails: List<HomeRail>,
         val isRefreshing: Boolean = false
     ) : HomeUiState
-
     data class Error(val message: String) : HomeUiState
 }
 
@@ -58,8 +52,6 @@ class HomeViewModel @Inject constructor(
     private val hiddenTitlesRepository: HiddenTitlesRepository,
     profileRepository: ProfileRepository
 ) : ViewModel() {
-
-    /** The feed as loaded; [uiState] is this minus the titles the user hid. */
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val uiState: StateFlow<HomeUiState> = combine(_uiState, hiddenTitlesRepository.hiddenKeys) { state, hidden ->
         if (state is HomeUiState.Success && hidden.isNotEmpty()) state.without(hidden) else state
@@ -69,7 +61,6 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
-        // First load, and again whenever the feed has to change: switching to or from a kids profile.
         viewModelScope.launch {
             profileRepository.activeProfile
                 .map { it?.isKids }
@@ -90,7 +81,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { watchProgressRepository.dismiss(item.mediaType, item.tmdbId) }
     }
 
-    /** Pull-to-refresh keeps the current feed on screen while the new one loads. */
     fun refresh() {
         val current = _uiState.value
         if (current is HomeUiState.Success) _uiState.value = current.copy(isRefreshing = true)
@@ -100,15 +90,24 @@ class HomeViewModel @Inject constructor(
     fun loadData(showLoading: Boolean = true, forceRefresh: Boolean = false) {
         viewModelScope.launch {
             if (showLoading) _uiState.value = HomeUiState.Loading
-            val primary = coroutineScope {
-                listOf(AnimeCatalog.TRENDING, AnimeCatalog.POPULAR_MOVIES, AnimeCatalog.POPULAR_SERIES)
-                    .associateWith { catalog -> async { repository.getCatalog(catalog, forceRefresh).getOrDefault(emptyList()) } }
-                    .mapValues { it.value.await() }
+            val primaryCatalogs = listOf(
+                AnimeCatalog.TRENDING,
+                AnimeCatalog.POPULAR_MOVIES,
+                AnimeCatalog.POPULAR_SERIES
+            )
+            val secondaryCatalogs = listOf(
+                AnimeCatalog.NEW_EPISODES,
+                AnimeCatalog.TRENDING_ANIME,
+                AnimeCatalog.TOP_RATED_MOVIES,
+                AnimeCatalog.ANIME_MOVIES
+            )
+            val allCatalogs = primaryCatalogs + secondaryCatalogs
+            val requests = coroutineScope {
+                allCatalogs.associateWith { catalog ->
+                    async { repository.getCatalog(catalog, forceRefresh).getOrDefault(emptyList()) }
+                }
             }
-            if (primary.values.all { it.isEmpty() }) {
-                _uiState.value = HomeUiState.Error("Couldn't reach the catalog")
-                return@launch
-            }
+
             fun buildRails(catalogs: Map<AnimeCatalog, List<AnimeDto>>): List<HomeRail> {
                 val watching = continueWatching.value
                 val moviePreference = watching.count { it.mediaType == "movie" } >= watching.count { it.mediaType == "tv" }
@@ -126,21 +125,25 @@ class HomeViewModel @Inject constructor(
                     HomeRail("anime-movies", "Anime movies", RailStyle.POSTER, catalogs[AnimeCatalog.ANIME_MOVIES].orEmpty())
                 ).filter { it.items.isNotEmpty() }
             }
+
+            val primary = primaryCatalogs.associateWith { requests.getValue(it).await() }
+            if (primary.values.all { it.isEmpty() }) {
+                _uiState.value = HomeUiState.Error("Couldn't reach the catalog")
+                return@launch
+            }
             _uiState.value = HomeUiState.Success(
                 hero = primary[AnimeCatalog.TRENDING].orEmpty().filter { it.posterPath != null }.take(8),
                 rails = buildRails(primary)
             )
-            val secondary = coroutineScope {
-                listOf(AnimeCatalog.NEW_EPISODES, AnimeCatalog.TRENDING_ANIME, AnimeCatalog.TOP_RATED_MOVIES, AnimeCatalog.ANIME_MOVIES)
-                    .associateWith { catalog -> async { repository.getCatalog(catalog, forceRefresh).getOrDefault(emptyList()) } }
-                    .mapValues { it.value.await() }
-            }
-            val all = primary + secondary
+
+            val all = allCatalogs.associateWith { requests.getValue(it).await() }
             val current = _uiState.value
-            if (current is HomeUiState.Success) _uiState.value = current.copy(
-                hero = all[AnimeCatalog.TRENDING].orEmpty().filter { it.posterPath != null }.take(8),
-                rails = buildRails(all)
-            )
+            if (current is HomeUiState.Success) {
+                _uiState.value = current.copy(
+                    hero = all[AnimeCatalog.TRENDING].orEmpty().filter { it.posterPath != null }.take(8),
+                    rails = buildRails(all)
+                )
+            }
         }
     }
 }
