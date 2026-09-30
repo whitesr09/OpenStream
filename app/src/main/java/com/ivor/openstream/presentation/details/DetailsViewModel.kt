@@ -91,22 +91,33 @@ class DetailsViewModel @Inject constructor(
                             else tmdbApi.getTvWatchProviders(animeId)
                         }.onSuccess { response ->
                             val region = response.results[country] ?: response.results["US"]
-                            val providers = linkedMapOf<Int, WatchProviderUi>()
-                            fun add(items: List<WatchProviderDto>, mode: String) {
-                                items.forEach { provider ->
-                                    providers.putIfAbsent(provider.providerId, WatchProviderUi(provider.providerId, provider.providerName, provider.logoPath, mode))
+                            val providerGroups = region?.let {
+                                listOf(
+                                    "Included" to it.flatrate,
+                                    "Free" to it.free,
+                                    "With ads" to it.ads,
+                                    "Rent" to it.rent,
+                                    "Buy" to it.buy
+                                )
+                            }.orEmpty()
+
+                            val providers = providerGroups
+                                .flatMap { (mode, items) ->
+                                    items.map { provider ->
+                                        WatchProviderUi(
+                                            id = provider.providerId,
+                                            name = provider.providerName,
+                                            logoPath = provider.logoPath,
+                                            availability = mode
+                                        )
+                                    }
                                 }
-                            }
-                            region?.let {
-                                add(it.flatrate, "Included")
-                                add(it.free, "Free")
-                                add(it.ads, "With ads")
-                                add(it.rent, "Rent")
-                                add(it.buy, "Buy")
-                            }
+                                .distinctBy { it.id }
+                                .sortedBy { it.name.lowercase() }
+
                             (_uiState.value as? DetailsUiState.Success)?.let { current ->
                                 _uiState.value = current.copy(
-                                    watchProviders = providers.values.sortedBy { it.providerName.lowercase() },
+                                    watchProviders = providers,
                                     watchProvidersLink = region?.link
                                 )
                             }
