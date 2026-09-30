@@ -11,12 +11,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -28,7 +29,10 @@ class StreamingRepositoryImpl @Inject constructor(
     @Named("StreamingClient") private val client: OkHttpClient,
     private val preferences: SharedPreferences
 ) : StreamingRepository {
-    private val consecutiveFailures = ConcurrentHashMap<String, Int>()
+    private val providerHealth = ProviderHealthTracker(
+        failureThreshold = CIRCUIT_BREAKER_THRESHOLD,
+        cooldownMs = CIRCUIT_BREAKER_COOLDOWN_MS
+    )
 
     override fun resolveServers(
         identity: MediaIdentity,
@@ -43,7 +47,7 @@ class StreamingRepositoryImpl @Inject constructor(
             compareBy<ExtensionStreamProvider> { if (it.id == preferredServerProviderId) 0 else 1 }
                 .thenBy { it.priority }
         ).filter {
-            it.isEnabled && (consecutiveFailures[it.id] ?: 0) < CIRCUIT_BREAKER_THRESHOLD
+            it.isEnabled && providerHealth.canAttempt(it.id)
         }
         val directProviders = if (includeFallbacks) {
             enabledProviders
@@ -64,11 +68,14 @@ class StreamingRepositoryImpl @Inject constructor(
         }
 
         val outcomes = Channel<ProviderOutcome>(enabledProviders.size)
+        val providerPermit = Semaphore(PROVIDER_PARALLELISM)
         firstStageProviders.forEach { provider ->
             launch(Dispatchers.IO) {
                 val result = runCatching {
-                    withTimeout(PROVIDER_TIMEOUT_MS) {
-                        provider.resolve(enrichedIdentity).getOrThrow()
+                    providerPermit.withPermit {
+                        withTimeout(PROVIDER_TIMEOUT_MS) {
+                            provider.resolve(enrichedIdentity).getOrThrow()
+                        }
                     }
                 }
                 outcomes.send(ProviderOutcome(provider, result))
@@ -81,7 +88,7 @@ class StreamingRepositoryImpl @Inject constructor(
             val outcome = outcomes.receive()
             outcome.result.fold(
                 onSuccess = { incoming ->
-                    consecutiveFailures[outcome.provider.id] = 0
+                    providerHealth.recordSuccess(outcome.provider.id)
                     providerRegistry.recordOutcome(outcome.provider, incoming.isNotEmpty())
                     if (incoming.isEmpty()) {
                         failedProviders += outcome.provider.displayName
@@ -95,7 +102,7 @@ class StreamingRepositoryImpl @Inject constructor(
                     }
                 },
                 onFailure = {
-                    consecutiveFailures.compute(outcome.provider.id) { _, count -> (count ?: 0) + 1 }
+                    providerHealth.recordFailure(outcome.provider.id)
                     providerRegistry.recordOutcome(outcome.provider, false)
                     failedProviders += outcome.provider.displayName
                 }
@@ -103,10 +110,10 @@ class StreamingRepositoryImpl @Inject constructor(
             val completed = completedIndex + 1
             val firstStageComplete = completed == firstStageProviders.size
             // Coverage mode: direct sources are resolved first, but fallback sources are still
-        // queried afterwards even when a direct source returned something. This prevents the
-        // first successful provider from hiding titles/qualities/languages that another source
-        // can provide.
-        val shouldTryFallback = firstStageComplete &&
+            // queried afterwards even when a direct source returned something. This prevents the
+            // first successful provider from hiding titles/qualities/languages that another source
+            // can provide.
+            val shouldTryFallback = firstStageComplete &&
                 deferredFallbackProviders.isNotEmpty()
             send(
                 ServerResolution(
@@ -124,8 +131,10 @@ class StreamingRepositoryImpl @Inject constructor(
             deferredFallbackProviders.forEach { provider ->
                 launch(Dispatchers.IO) {
                     val result = runCatching {
-                        withTimeout(PROVIDER_TIMEOUT_MS) {
-                            provider.resolve(enrichedIdentity).getOrThrow()
+                        providerPermit.withPermit {
+                            withTimeout(PROVIDER_TIMEOUT_MS) {
+                                provider.resolve(enrichedIdentity).getOrThrow()
+                            }
                         }
                     }
                     outcomes.send(ProviderOutcome(provider, result))
@@ -136,7 +145,7 @@ class StreamingRepositoryImpl @Inject constructor(
                 val outcome = outcomes.receive()
                 outcome.result.fold(
                     onSuccess = { incoming ->
-                        consecutiveFailures[outcome.provider.id] = 0
+                        providerHealth.recordSuccess(outcome.provider.id)
                         providerRegistry.recordOutcome(outcome.provider, incoming.isNotEmpty())
                         if (incoming.isEmpty()) {
                             failedProviders += outcome.provider.displayName
@@ -150,7 +159,7 @@ class StreamingRepositoryImpl @Inject constructor(
                         }
                     },
                     onFailure = {
-                        consecutiveFailures.compute(outcome.provider.id) { _, count -> (count ?: 0) + 1 }
+                        providerHealth.recordFailure(outcome.provider.id)
                         providerRegistry.recordOutcome(outcome.provider, false)
                         failedProviders += outcome.provider.displayName
                     }
@@ -203,5 +212,7 @@ class StreamingRepositoryImpl @Inject constructor(
     private companion object {
         const val PROVIDER_TIMEOUT_MS = 12_000L
         const val CIRCUIT_BREAKER_THRESHOLD = 5
+        const val CIRCUIT_BREAKER_COOLDOWN_MS = 10 * 60_000L
+        const val PROVIDER_PARALLELISM = 4
     }
 }
