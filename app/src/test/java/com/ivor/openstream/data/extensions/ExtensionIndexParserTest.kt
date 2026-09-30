@@ -67,6 +67,22 @@ class ExtensionIndexParserTest {
     }
 
     @Test
+    fun `parses single extension object as extension list`() {
+        val entries = parser.parseExtensionList(
+            """
+            {
+              "id": "single",
+              "name": "Single",
+              "engine": { "type": "web-json", "endpoint": "https://example.com/sources/{tmdbId}" }
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(1, entries.size)
+        assertEquals("single", entries.single().id)
+    }
+
+    @Test
     fun `maps entry fields onto a manifest`() {
         val entry = parser.parseExtensionList(
             """

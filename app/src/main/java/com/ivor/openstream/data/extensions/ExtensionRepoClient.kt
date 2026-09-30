@@ -1,9 +1,12 @@
 package com.ivor.openstream.data.extensions
 
+import com.ivor.openstream.data.extensions.runtime.ProviderRuntimePolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+import okio.Buffer
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Named
@@ -17,16 +20,21 @@ class ExtensionRepoClient @Inject constructor(
 ) {
 
     suspend fun fetch(url: String): CachedRepoSnapshot = withContext(Dispatchers.IO) {
-        val repo = parser.parseRepo(get(url))
+        val raw = get(url)
+        val repo = parser.parseRepo(raw)
         val linked = repo.extensionLists
             .mapNotNull { RepoUrlNormalizer.normalize(it) }
             .flatMap { listUrl ->
                 runCatching { parser.parseExtensionList(get(listUrl)) }.getOrElse { emptyList() }
             }
 
-        val entries = (repo.extensions + linked).distinctBy { it.id }
+        val direct = repo.extensions.ifEmpty { parser.parseExtensionList(raw) }
+        val entries = (direct + linked).distinctBy { it.id }
         if (entries.isEmpty() && repo.extensionLists.isNotEmpty()) {
             throw IOException("Repository lists could not be read")
+        }
+        if (entries.isEmpty()) {
+            throw IOException("Repository published no extensions")
         }
 
         CachedRepoSnapshot(
@@ -50,9 +58,33 @@ class ExtensionRepoClient @Inject constructor(
             if (!response.isSuccessful) {
                 throw IOException("HTTP ${response.code} from ${response.request.url.host}")
             }
-            val body = response.body?.string().orEmpty()
+            val body = response.readBodyLimited()
             if (body.isBlank()) throw IOException("Empty response from ${response.request.url.host}")
             return body
+        }
+    }
+
+    private fun Response.readBodyLimited(): String {
+        val responseBody = body ?: return ""
+        val declaredLength = responseBody.contentLength()
+        if (declaredLength > ProviderRuntimePolicy.MAX_RESPONSE_BYTES) {
+            throw IOException("Response is too large from ${request.url.host}")
+        }
+        val maxBytes = ProviderRuntimePolicy.MAX_RESPONSE_BYTES
+        responseBody.byteStream().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            val output = Buffer()
+            var total = 0L
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > maxBytes) {
+                    throw IOException("Response is too large from ${request.url.host}")
+                }
+                output.write(buffer, 0, read)
+            }
+            return output.readUtf8()
         }
     }
 

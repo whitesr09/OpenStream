@@ -44,7 +44,16 @@ class ExtensionIndexParser @Inject constructor() {
         val root = json.parseToJsonElement(raw)
         return when (root) {
             is JsonArray -> decodeEntries(root)
-            is JsonObject -> decodeEntries(root["extensions"] as? JsonArray)
+            is JsonObject -> {
+                val listed = decodeEntries(root["extensions"] as? JsonArray)
+                if (listed.isNotEmpty()) {
+                    listed
+                } else {
+                    runCatching {
+                        listOf(json.decodeFromJsonElement(ExtensionEntryDto.serializer(), root))
+                    }.getOrDefault(emptyList())
+                }
+            }
             else -> emptyList()
         }
     }
