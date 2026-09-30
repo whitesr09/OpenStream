@@ -8,7 +8,7 @@ import org.junit.Test
 
 class ServerRankerTest {
     @Test
-    fun ranksQualityThenAudioThenProviderAndDeduplicatesUrls() {
+    fun ranksQualityThenAudioThenProviderAndKeepsDistinctProviderSources() {
         val low = server("low", "a", "https://example.com/low.m3u8", StreamQuality.Q720)
         val dub = server("dub", "b", "https://example.com/high.m3u8", StreamQuality.Q1080, StreamAudio.DUB)
         val sub = server("sub", "a", "https://example.com/high.m3u8", StreamQuality.Q1080, StreamAudio.SUB)
@@ -20,7 +20,22 @@ class ServerRankerTest {
             preferredServerId = null
         )
 
-        assertEquals(listOf("sub", "low"), ranked.map { it.id })
+        assertEquals(listOf("sub", "dub", "low"), ranked.map { it.id })
+    }
+
+    @Test
+    fun deduplicatesSameProviderUrlAndHeaders() {
+        val first = server("first", "a", "https://example.com/high.m3u8", StreamQuality.Q1080)
+        val duplicate = server("duplicate", "a", "https://example.com/high.m3u8", StreamQuality.Q1080)
+
+        val ranked = ServerRanker.mergeAndRank(
+            existing = listOf(first),
+            incoming = listOf(duplicate),
+            providerPriorities = mapOf("a" to 0),
+            preferredServerId = null
+        )
+
+        assertEquals(listOf("first"), ranked.map { it.id })
     }
 
     @Test
