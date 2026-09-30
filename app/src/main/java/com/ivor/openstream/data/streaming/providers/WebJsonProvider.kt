@@ -17,7 +17,7 @@ import okhttp3.Request
 
 /** Generic, declarative HTTPS JSON provider. No remote code is executed. */
 class WebJsonProvider(
-    private val id: String,
+    override val id: String,
     private val name: String,
     private val endpointTemplate: String,
     override val priority: Int,

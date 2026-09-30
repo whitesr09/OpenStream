@@ -15,7 +15,7 @@ import okhttp3.Request
 
 /** Minimal Stremio addon stream runtime. Only the public JSON stream contract is consumed. */
 class StremioAddonProvider(
-    private val id: String,
+    override val id: String,
     private val name: String,
     private val endpoint: String,
     override val priority: Int,
