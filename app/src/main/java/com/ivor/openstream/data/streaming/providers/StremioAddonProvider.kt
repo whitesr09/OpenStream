@@ -36,7 +36,7 @@ class StremioAddonProvider(
         client.newCall(request).execute().use { response ->
             require(response.isSuccessful) { "Addon returned HTTP ${response.code}" }
             val body = response.body?.string().orEmpty()
-            require(body.toByteArray().size <= ProviderRuntimePolicy.MAX_RESPONSE_BYTES) { "Addon response is too large" }
+            require(body.toByteArray().size.toLong() <= ProviderRuntimePolicy.MAX_RESPONSE_BYTES) { "Addon response is too large" }
             val root = json.parseToJsonElement(body).jsonObject
             root["streams"]?.jsonArray.orEmpty().mapNotNull { element ->
                 val stream = element.jsonObject
