@@ -14,6 +14,10 @@ object RepoUrlNormalizer {
         "^https://github\\.com/([^/]+)/([^/]+)/?$",
         RegexOption.IGNORE_CASE
     )
+    private val GITHUB_TREE_PATH = Regex(
+        "^https://github\\.com/([^/]+)/([^/]+)/tree/([^/]+)/(.+)$",
+        RegexOption.IGNORE_CASE
+    )
 
     fun normalize(input: String): String? {
         val trimmed = input.trim().trim('"', '\'')
@@ -34,6 +38,13 @@ object RepoUrlNormalizer {
         GITHUB_TREE_ROOT.find(withScheme)?.let { match ->
             val (owner, repo) = match.destructured
             return "https://raw.githubusercontent.com/$owner/$repo/main/extensions/index.json"
+        }
+        GITHUB_TREE_PATH.find(withScheme)?.let { match ->
+            val (owner, repo, branch, path) = match.destructured
+            val normalizedPath = path.trim('/').let {
+                if (it.endsWith(".json", ignoreCase = true)) it else "$it/index.json"
+            }
+            return "https://raw.githubusercontent.com/$owner/$repo/$branch/$normalizedPath"
         }
         return withScheme
     }

@@ -26,6 +26,18 @@ class RepoUrlNormalizerTest {
     }
 
     @Test
+    fun `github tree paths map to raw index json`() {
+        assertEquals(
+            "https://raw.githubusercontent.com/owner/repo/main/extensions/index.json",
+            RepoUrlNormalizer.normalize("https://github.com/owner/repo/tree/main/extensions")
+        )
+        assertEquals(
+            "https://raw.githubusercontent.com/owner/repo/dev/catalog/custom.json",
+            RepoUrlNormalizer.normalize("https://github.com/owner/repo/tree/dev/catalog/custom.json")
+        )
+    }
+
+    @Test
     fun `plain hosts get https and keep their path`() {
         assertEquals(
             "https://example.com/repo/index.json",
