@@ -1,6 +1,5 @@
 package com.ivor.openstream.data.repository
 
-import com.ivor.openstream.data.remote.TmdbApi
 import com.ivor.openstream.domain.model.CatalogContentType
 import com.ivor.openstream.domain.model.CatalogItem
 import com.ivor.openstream.domain.model.MediaIdentity
@@ -14,7 +13,7 @@ import kotlin.math.abs
  */
 @Singleton
 class MediaIdentityResolver @Inject constructor(
-    private val api: TmdbApi
+    private val gateway: TmdbIdentityGateway
 ) {
     suspend fun resolve(item: CatalogItem): Result<MediaIdentity?> = runCatching {
         val explicitTmdb = item.externalIds["tmdb"]?.toIntOrNull()
@@ -25,7 +24,7 @@ class MediaIdentityResolver @Inject constructor(
         val externalIdentity = resolveExternalId(item)
         if (externalIdentity != null) return@runCatching externalIdentity
 
-        val response = api.searchMulti(item.title, 1)
+        val response = gateway.searchMulti(item.title, 1)
         val candidates = response.results
             .filter { it.mediaType == "movie" || it.mediaType == "tv" }
             .map { candidate ->
@@ -33,7 +32,7 @@ class MediaIdentityResolver @Inject constructor(
                 val typeScore = if (
                     item.type == CatalogContentType.MOVIE && candidateType == CatalogContentType.MOVIE ||
                     item.type != CatalogContentType.MOVIE && candidateType == CatalogContentType.SERIES
-                ) 100 else 0
+                ) 40 else 0
                 val title = candidate.name.trim().lowercase()
                 val query = item.title.trim().lowercase()
                 val titleScore = when {
@@ -66,7 +65,7 @@ class MediaIdentityResolver @Inject constructor(
             item.externalIds["tvdb"]?.let { it to "tvdb_id" }
         )
         for ((externalId, externalSource) in candidates.filterNotNull()) {
-            val lookup = api.findByExternalId(externalId, externalSource)
+            val lookup = runCatching { gateway.findByExternalId(externalId, externalSource) }.getOrNull() ?: continue
             val expectedType = item.type.toTmdbType()
             val candidate = when (expectedType) {
                 "movie" -> lookup.movieResults.firstOrNull()
@@ -83,7 +82,7 @@ class MediaIdentityResolver @Inject constructor(
         tmdbType: String,
         resolvedYear: Int? = item.year
     ): MediaIdentity {
-        val ids = api.getExternalIds(tmdbType, tmdbId)
+        val ids = gateway.getExternalIds(tmdbType, tmdbId)
         return MediaIdentity(
             tmdbId = tmdbId,
             tmdbType = tmdbType,
