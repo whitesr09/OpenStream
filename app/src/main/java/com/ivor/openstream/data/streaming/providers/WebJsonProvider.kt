@@ -8,6 +8,7 @@ import com.ivor.openstream.domain.model.VideoServer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -30,12 +31,7 @@ class WebJsonProvider(
     override suspend fun resolve(identity: MediaIdentity): Result<List<VideoServer>> = runCatching {
         val url = expand(endpointTemplate, identity)
         require(ProviderRuntimePolicy.isAllowedUrl(url)) { "Provider endpoint is not allowed" }
-
-        val request = Request.Builder()
-            .url(url)
-            .header("Accept", "application/json")
-            .build()
-
+        val request = Request.Builder().url(url).header("Accept", "application/json").build()
         client.newCall(request).execute().use { response ->
             require(response.isSuccessful) { "Provider returned HTTP ${response.code}" }
             val body = response.body?.string().orEmpty()
