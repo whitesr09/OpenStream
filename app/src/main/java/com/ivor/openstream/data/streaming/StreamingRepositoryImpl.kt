@@ -9,7 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -37,7 +37,12 @@ class StreamingRepositoryImpl @Inject constructor(
         val enrichedIdentity = idMappingService.enrich(identity)
         val installedProviders = withContext(Dispatchers.IO) { providerRegistry.activeProviders() }
         val providerPriorities = installedProviders.associate { it.id to it.priority }
-        val enabledProviders = installedProviders.filter {
+        val preferredServerId = preferences.getString(preferenceKey(identity), null)
+        val preferredServerProviderId = preferredServerId?.substringBefore(":")
+        val enabledProviders = installedProviders.sortedWith(
+            compareBy<ExtensionStreamProvider> { if (it.id == preferredServerProviderId) 0 else 1 }
+                .thenBy { it.priority }
+        ).filter {
             it.isEnabled && (consecutiveFailures[it.id] ?: 0) < CIRCUIT_BREAKER_THRESHOLD
         }
         val directProviders = if (includeFallbacks) {
@@ -52,7 +57,6 @@ class StreamingRepositoryImpl @Inject constructor(
         }
         val firstStageProviders = directProviders.ifEmpty { fallbackProviders }
         val deferredFallbackProviders = fallbackProviders.takeIf { directProviders.isNotEmpty() }.orEmpty()
-        val preferredServerId = preferences.getString(preferenceKey(identity), null)
         send(ServerResolution(totalProviders = firstStageProviders.size))
         if (firstStageProviders.isEmpty()) {
             send(ServerResolution(isComplete = true))
@@ -167,7 +171,7 @@ class StreamingRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getServers(identity: MediaIdentity): List<VideoServer> =
-        resolveServers(identity).last().servers
+        resolveServers(identity).first { it.servers.isNotEmpty() || it.isComplete }.servers
 
     override suspend fun refreshServer(server: VideoServer): Result<VideoServer> =
         runCatching {
@@ -197,7 +201,7 @@ class StreamingRepositoryImpl @Inject constructor(
     )
 
     private companion object {
-        const val PROVIDER_TIMEOUT_MS = 20_000L
+        const val PROVIDER_TIMEOUT_MS = 12_000L
         const val CIRCUIT_BREAKER_THRESHOLD = 5
     }
 }

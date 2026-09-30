@@ -173,6 +173,8 @@ class SettingsViewModel @Inject constructor(
 
     fun setDynamicColor(enabled: Boolean) = appSettingsStore.update { it.copy(dynamicColor = enabled) }
 
+    fun setShowAdultContent(enabled: Boolean) = appSettingsStore.update { it.copy(showAdultContent = enabled) }
+
     fun setCatalogProviderEnabled(id: String, enabled: Boolean) = appSettingsStore.update { settings ->
         val disabled = settings.disabledCatalogProviders.toMutableSet().apply { if (enabled) remove(id) else add(id) }
         settings.copy(disabledCatalogProviders = disabled)

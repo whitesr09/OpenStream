@@ -223,6 +223,22 @@ fun SettingsScreen(
                 }
             }
 
+            item(key = "content-preferences") {
+                SettingsGroup(
+                    title = "Content preferences",
+                    footer = "Adult-rated and erotic metadata is hidden by default. Turn this on only if you want those titles included in browsing and search."
+                ) {
+                    SwitchRow(
+                        index = 0, count = 1,
+                        icon = Icons.Default.Shield,
+                        title = "Show adult content",
+                        supporting = if (appSettings.showAdultContent) "Adult-rated results are enabled" else "Adult-rated results are hidden",
+                        checked = appSettings.showAdultContent,
+                        onCheckedChange = viewModel::setShowAdultContent
+                    )
+                }
+            }
+
             item(key = "appearance") {
                 val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                 val count = if (dynamicAvailable) 2 else 1

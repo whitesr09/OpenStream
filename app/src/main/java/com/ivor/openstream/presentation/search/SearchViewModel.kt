@@ -309,7 +309,7 @@ class SearchViewModel @Inject constructor(
         const val RECENT_KEY = "search_history_list"
         const val MAX_RECENT = 10
         const val MIN_QUERY_LENGTH = 2
-        const val TYPING_DEBOUNCE_MS = 400L
+        const val TYPING_DEBOUNCE_MS = 250L
         const val MIN_FILTERED_RESULTS = 12
         const val MAX_AUTO_PAGES = 5
     }
