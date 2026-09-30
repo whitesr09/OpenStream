@@ -56,21 +56,31 @@ class ExtensionIndexParser @Inject constructor() {
         json.decodeFromString(CachedRepoSnapshot.serializer(), raw)
 
     fun toManifest(entry: ExtensionEntryDto, repoId: String): ExtensionManifest? {
-        val id = entry.id.trim()
+        // Accept the common Mihon/Aninyomi package field as an identifier. This lets an APK index
+        // enter the marketplace without pretending that its binary can be executed by OpenStream.
+        val id = entry.id.trim().ifEmpty { entry.pkg?.trim().orEmpty() }
         if (id.isEmpty()) return null
         val engineType = ExtensionEngineType.fromKey(entry.engine.type)
+        val apkOnly = entry.apk?.trim()?.takeIf { it.isNotEmpty() }
+        val mergedTags = buildList {
+            addAll(entry.tags)
+            if (apkOnly != null) add("apk")
+            if (apkOnly != null && engineType == ExtensionEngineType.UNSUPPORTED) add("external")
+        }
         return ExtensionManifest(
             id = id,
             repoId = repoId,
             name = entry.name.trim().ifEmpty { id },
-            description = entry.description.trim(),
+            description = entry.description.trim().ifEmpty {
+                apkOnly?.let { "External APK extension. The APK is listed for compatibility but is not executed inside OpenStream." }.orEmpty()
+            },
             authors = entry.authors.filter { it.isNotBlank() },
             versionName = entry.version.trim().ifEmpty { "1.0.0" },
             versionCode = entry.versionCode.coerceAtLeast(1),
             apiVersion = entry.apiVersion.coerceAtLeast(1),
             language = entry.language.trim().ifEmpty { "Multi" },
             iconUrl = entry.iconUrl?.trim()?.takeIf { it.isNotEmpty() },
-            tags = entry.tags.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct(),
+            tags = mergedTags.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct(),
             status = ExtensionStatus.fromCode(entry.status),
             isNsfw = entry.nsfw,
             installs = entry.installs.coerceAtLeast(0L),
