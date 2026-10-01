@@ -101,7 +101,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             if (showLoading) _uiState.value = HomeUiState.Loading
             val primary = coroutineScope {
-                listOf(AnimeCatalog.TRENDING, AnimeCatalog.POPULAR_MOVIES, AnimeCatalog.POPULAR_SERIES)
+                listOf(AnimeCatalog.PERSONAL_LIBRARY, AnimeCatalog.TRENDING, AnimeCatalog.POPULAR_MOVIES, AnimeCatalog.POPULAR_SERIES)
                     .associateWith { catalog -> async { repository.getCatalog(catalog, forceRefresh).getOrDefault(emptyList()) } }
                     .mapValues { it.value.await() }
             }
@@ -117,6 +117,7 @@ class HomeViewModel @Inject constructor(
                 val preferredLabel = if (moviePreference) "movies" else "series"
                 val trending = catalogs[AnimeCatalog.TRENDING].orEmpty()
                 return listOf(
+                    HomeRail("personal-library", "My library", RailStyle.POSTER, catalogs[AnimeCatalog.PERSONAL_LIBRARY].orEmpty()),
                     HomeRail("trending", "Trending now", RailStyle.RANKED, trending.take(10)),
                     HomeRail("preferred", "Because you watch $preferredLabel", RailStyle.POSTER, catalogs[firstType].orEmpty()),
                     HomeRail("continue", "Continue exploring", RailStyle.LANDSCAPE, catalogs[secondType].orEmpty().filter { it.backdropPath != null }),

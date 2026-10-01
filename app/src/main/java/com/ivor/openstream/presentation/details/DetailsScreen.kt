@@ -152,6 +152,7 @@ fun DetailsScreen(
     val episodeDownloads by viewModel.episodeDownloads.collectAsState()
     val episodeProgress by viewModel.episodeProgress.collectAsState()
     val resumeTarget by viewModel.resumeTarget.collectAsState()
+    val playAvailable by viewModel.playAvailable.collectAsState()
     val titleWatched by viewModel.titleWatched.collectAsState()
     val titleWatchedBusy by viewModel.titleWatchedBusy.collectAsState()
     val lists by viewModel.lists.collectAsState()
@@ -215,11 +216,13 @@ fun DetailsScreen(
                             movieDownload = episodeDownloads[1 to 1].takeIf { isMovie },
                             hasTrailer = trailers.isNotEmpty(),
                             onPlay = {
-                                val resume = resumeTarget
-                                if (resume != null) {
-                                    onPlayClick(resume.season, resume.episode)
-                                } else {
-                                    onPlayClick(details.firstPlayableSeason(), 1)
+                                if (playAvailable) {
+                                    val resume = resumeTarget
+                                    if (resume != null) {
+                                        onPlayClick(resume.season, resume.episode)
+                                    } else {
+                                        onPlayClick(details.firstPlayableSeason(), 1)
+                                    }
                                 }
                             },
                             onToggleSaved = viewModel::toggleWatchLater,
@@ -241,7 +244,9 @@ fun DetailsScreen(
                                         ?.let(viewModel::downloadEpisodes)
                                 }
                             },
-                            trailer = trailers.firstOrNull()
+                            trailer = trailers.firstOrNull(),
+                            playEnabled = playAvailable,
+                            playDisabledLabel = "Add this title to your personal manifest to play."
                         )
                     }
 
@@ -713,6 +718,8 @@ private fun PrimaryActions(
     movieDownload: DownloadEntity?,
     hasTrailer: Boolean,
     trailer: VideoDto?,
+    playEnabled: Boolean,
+    playDisabledLabel: String,
     onPlay: () -> Unit,
     onToggleSaved: () -> Unit,
     isWatched: Boolean,
@@ -726,6 +733,7 @@ private fun PrimaryActions(
     Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp)) {
         Button(
             onClick = onPlay,
+            enabled = playEnabled,
             shape = ExpressiveShapes.large,
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
             modifier = Modifier
@@ -750,6 +758,14 @@ private fun PrimaryActions(
                     Text("$minutesLeft min left", style = MaterialTheme.typography.labelMedium)
                 }
             }
+        }
+        if (!playEnabled) {
+            Text(
+                text = playDisabledLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp)
+            )
         }
         if (resume != null && resume.fraction > 0f) {
             LinearProgressIndicator(

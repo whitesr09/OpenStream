@@ -48,9 +48,14 @@ android {
             .getProperty("VIDKING_API_BASE_URL", "https://api.speedracelight.com")
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
+        val personalLibraryManifestUrl = localProperties
+            .getProperty("PERSONAL_LIBRARY_MANIFEST_URL", "")
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
 
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
         buildConfigField("String", "VIDKING_API_BASE_URL", "\"$vidkingApiBaseUrl\"")
+        buildConfigField("String", "PERSONAL_LIBRARY_MANIFEST_URL", "\"$personalLibraryManifestUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

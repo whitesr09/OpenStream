@@ -25,7 +25,8 @@ class AnimeRepositoryImpl @Inject constructor(
     private val kids: KidsContentFilter,
     private val catalogSearch: CatalogSearchRepository,
     private val identityResolver: MediaIdentityResolver,
-    private val appSettingsStore: AppSettingsStore
+    private val appSettingsStore: AppSettingsStore,
+    private val personalLibraryRepository: PersonalLibraryRepository
 ) : AnimeRepository {
 
     private val HISTORY_KEY = "watch_history_list"
@@ -52,7 +53,7 @@ class AnimeRepositoryImpl @Inject constructor(
         val cached = catalogCache[key] ?: readCachedCatalog(key)?.also { catalogCache[key] = it }
         val isFresh = cached != null && System.currentTimeMillis() - cached.savedAt < CATALOG_TTL_MS
         if (!forceRefresh && isFresh) return Result.success(cached!!.items)
-        return fetchCatalog(catalog)
+        return fetchCatalog(catalog, forceRefresh)
             .onSuccess { items ->
                 val entry = CachedCatalog(System.currentTimeMillis(), items)
                 catalogCache[key] = entry
@@ -70,7 +71,7 @@ class AnimeRepositoryImpl @Inject constructor(
         if (kids.isActive) "catalog_cache_kids_${catalog.name}_${appSettingsStore.current.showAdultContent}"
         else "catalog_cache_${catalog.name}_${appSettingsStore.current.showAdultContent}"
 
-    private suspend fun fetchCatalog(catalog: AnimeCatalog): Result<List<AnimeDto>> = runCatching {
+    private suspend fun fetchCatalog(catalog: AnimeCatalog, forceRefresh: Boolean): Result<List<AnimeDto>> = runCatching {
         val anime = mapOf(
             "with_genres" to "$ANIMATION_GENRE",
             "with_original_language" to "ja",
@@ -79,6 +80,7 @@ class AnimeRepositoryImpl @Inject constructor(
         val movieKids = kids.movieDiscoverParams()
         val tvKids = kids.tvDiscoverParams()
         val results = when (catalog) {
+            AnimeCatalog.PERSONAL_LIBRARY -> personalLibraryRepository.catalogEntries(forceRefresh).getOrDefault(emptyList())
             AnimeCatalog.TRENDING -> api.getTrendingAll("week").results
                 // The mixed feed also lists people.
                 .filter { it.mediaType == "movie" || it.mediaType == "tv" }
@@ -103,7 +105,7 @@ class AnimeRepositoryImpl @Inject constructor(
                 anime + mapOf("sort_by" to "popularity.desc", "vote_count.gte" to "100") + movieKids
             ).results.map { it.copy(mediaType = "movie") }
         }
-        val moviesPreFiltered = catalog == AnimeCatalog.POPULAR_MOVIES || catalog == AnimeCatalog.TOP_RATED_MOVIES ||
+        val moviesPreFiltered = catalog == AnimeCatalog.PERSONAL_LIBRARY || catalog == AnimeCatalog.POPULAR_MOVIES || catalog == AnimeCatalog.TOP_RATED_MOVIES ||
             catalog == AnimeCatalog.ANIME_MOVIES
         kids.filter(
             results.filter { it.posterPath != null }.distinctBy { "${it.mediaType}:${it.id}" },
