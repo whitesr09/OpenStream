@@ -89,6 +89,8 @@ You need Android Studio (or JDK 17 and the Android SDK) and a free
 git clone https://github.com/Ivorisnoob/OpenStream.git
 cd OpenStream
 echo "TMDB_API_KEY=your_key_here" >> local.properties
+# Optional: your own movie manifest URL (personal library mode)
+echo "PERSONAL_LIBRARY_MANIFEST_URL=https://your-server/library.json" >> local.properties
 ./gradlew installDebug
 ```
 

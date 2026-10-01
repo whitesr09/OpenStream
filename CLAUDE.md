@@ -16,7 +16,7 @@ When a doc and the code disagree, trust the code, then fix the doc.
 ```
 
 `local.properties` holds `TMDB_API_KEY` (falls back to `DEMO_KEY`) and optionally
-`VIDKING_API_BASE_URL`. `assembleRelease` signs when `OPENSTREAM_KEYSTORE_PATH`,
+`VIDKING_API_BASE_URL` and `PERSONAL_LIBRARY_MANIFEST_URL`. `assembleRelease` signs when `OPENSTREAM_KEYSTORE_PATH`,
 `OPENSTREAM_KEYSTORE_PASSWORD`, `OPENSTREAM_KEY_ALIAS` and `OPENSTREAM_KEY_PASSWORD` are set in the
 environment. `.github/workflows/release-apk.yml` builds a signed APK artifact on the owner's pushes
 to `main` and on manual dispatch (any branch); there are no other CI checks.

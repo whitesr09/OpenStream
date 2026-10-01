@@ -272,9 +272,9 @@ private fun CarouselItemScope.HeroCard(
     ) {
         AsyncImage(
             model = if (wide && anime.backdropPath != null) {
-                "https://image.tmdb.org/t/p/w1280${anime.backdropPath}"
+                imageUrl(anime.backdropPath, "w1280")
             } else {
-                "https://image.tmdb.org/t/p/w780${anime.posterPath}"
+                imageUrl(anime.posterPath, "w780")
             },
             contentDescription = anime.name,
             contentScale = ContentScale.Crop,
@@ -381,7 +381,7 @@ private fun RankedRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onHide
                         .offset(y = 28.dp)
                 )
                 AsyncImage(
-                    model = "https://image.tmdb.org/t/p/w342${anime.posterPath}",
+                    model = imageUrl(anime.posterPath, "w342"),
                     contentDescription = anime.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -420,7 +420,7 @@ private fun LandscapeRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onH
         ) {
             NotInterestedMenu(menuOpen, onDismiss = { menuOpen = false }, onHide = { onHide(anime) })
             AsyncImage(
-                model = "https://image.tmdb.org/t/p/w780${anime.backdropPath}",
+                model = imageUrl(anime.backdropPath, "w780"),
                 contentDescription = anime.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -462,7 +462,7 @@ private fun PosterRail(items: List<AnimeDto>, onOpen: (AnimeDto) -> Unit, onHide
             ) {
                 NotInterestedMenu(menuOpen, onDismiss = { menuOpen = false }, onHide = { onHide(anime) })
                 AsyncImage(
-                    model = "https://image.tmdb.org/t/p/w342${anime.posterPath}",
+                    model = imageUrl(anime.posterPath, "w342"),
                     contentDescription = anime.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -498,6 +498,12 @@ private fun Modifier.titleClickable(anime: AnimeDto, onOpen: (AnimeDto) -> Unit,
         },
         onClick = { onOpen(anime) }
     )
+}
+
+private fun imageUrl(path: String?, size: String): String? {
+    val value = path?.trim().orEmpty()
+    if (value.isBlank()) return null
+    return if (value.startsWith("http://") || value.startsWith("https://")) value else "https://image.tmdb.org/t/p/$size$value"
 }
 
 @Composable

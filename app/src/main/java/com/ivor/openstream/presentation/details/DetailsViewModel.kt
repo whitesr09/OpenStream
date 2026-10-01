@@ -14,6 +14,7 @@ import com.ivor.openstream.data.local.entity.DownloadEntity
 import com.ivor.openstream.data.local.dao.CustomListSummary
 import com.ivor.openstream.data.local.entity.CustomListItemEntity
 import com.ivor.openstream.data.repository.CustomListRepository
+import com.ivor.openstream.data.repository.PersonalLibraryRepository
 import com.ivor.openstream.domain.model.DownloadTarget
 import com.ivor.openstream.domain.model.WatchProgress
 import com.ivor.openstream.domain.repository.AnimeRepository
@@ -43,6 +44,7 @@ class DetailsViewModel @Inject constructor(
     private val downloadRepository: DownloadRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val listRepository: CustomListRepository,
+    private val personalLibraryRepository: PersonalLibraryRepository,
     private val tmdbApi: TmdbApi,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -52,6 +54,8 @@ class DetailsViewModel @Inject constructor(
     
     private val _uiState = MutableStateFlow<DetailsUiState>(DetailsUiState.Loading)
     val uiState: StateFlow<DetailsUiState> = _uiState.asStateFlow()
+    private val _playAvailable = MutableStateFlow(true)
+    val playAvailable: StateFlow<Boolean> = _playAvailable.asStateFlow()
 
 
     val isWatchLater: StateFlow<Boolean> = watchLaterRepository.isWatchLater(animeId)
@@ -80,9 +84,15 @@ class DetailsViewModel @Inject constructor(
     fun loadDetails() {
         viewModelScope.launch {
             _uiState.value = DetailsUiState.Loading
+            _playAvailable.value = true
             repository.getMediaDetails(animeId, mediaType)
                 .onSuccess { details ->
                     _uiState.value = DetailsUiState.Success(details)
+                    _playAvailable.value = if (personalLibraryRepository.isConfigured) {
+                        personalLibraryRepository.hasPlayableStream(mediaType, animeId)
+                    } else {
+                        true
+                    }
                     // Watch availability is supplemental: provider failure must never block details.
                     viewModelScope.launch {
                         val country = java.util.Locale.getDefault().country.ifBlank { "US" }

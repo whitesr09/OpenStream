@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import com.ivor.openstream.domain.model.MediaIdentity
 import com.ivor.openstream.domain.model.ServerResolution
 import com.ivor.openstream.domain.model.VideoServer
+import com.ivor.openstream.data.repository.PersonalLibraryRepository
 import com.ivor.openstream.domain.repository.StreamingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -25,6 +26,7 @@ import javax.inject.Singleton
 class StreamingRepositoryImpl @Inject constructor(
     private val providerRegistry: ExtensionProviderRegistry,
     private val idMappingService: IdMappingService,
+    private val personalLibraryRepository: PersonalLibraryRepository,
     @Named("StreamingClient") private val client: OkHttpClient,
     private val preferences: SharedPreferences
 ) : StreamingRepository {
@@ -35,6 +37,22 @@ class StreamingRepositoryImpl @Inject constructor(
         includeFallbacks: Boolean
     ): Flow<ServerResolution> = channelFlow {
         val enrichedIdentity = idMappingService.enrich(identity)
+        if (personalLibraryRepository.isConfigured) {
+            send(ServerResolution(totalProviders = 1))
+            val personalStreams = personalLibraryRepository
+                .streamsFor(enrichedIdentity.tmdbType, enrichedIdentity.tmdbId)
+                .getOrDefault(emptyList())
+            send(
+                ServerResolution(
+                    servers = personalStreams,
+                    completedProviders = 1,
+                    totalProviders = 1,
+                    failedProviders = if (personalStreams.isEmpty()) listOf("My Library") else emptyList(),
+                    isComplete = true
+                )
+            )
+            return@channelFlow
+        }
         val installedProviders = withContext(Dispatchers.IO) { providerRegistry.activeProviders() }
         val providerPriorities = installedProviders.associate { it.id to it.priority }
         val preferredServerId = preferences.getString(preferenceKey(identity), null)
